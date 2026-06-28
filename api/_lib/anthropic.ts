@@ -27,6 +27,12 @@ export function getAnthropic(): Anthropic {
   return client;
 }
 
+export interface FieldToCollect {
+  key: string;
+  label: string;
+  required: boolean;
+}
+
 export interface IntakeContext {
   /** Pro's commercial name, e.g. "Cabinet Dupont". */
   businessName?: string;
@@ -34,6 +40,8 @@ export interface IntakeContext {
   profession?: string;
   /** Pro-specific instructions (intake_config.system_prompt_addition). */
   instructions?: string;
+  /** Fields the assistant must collect (intake_config.fields_to_collect). */
+  fields?: FieldToCollect[];
 }
 
 /**
@@ -62,6 +70,17 @@ export function buildSystemPrompt(ctx: IntakeContext = {}): string {
 
   if (ctx.instructions?.trim()) {
     lines.push('', 'Specific context for this professional:', ctx.instructions.trim());
+  }
+
+  if (ctx.fields?.length) {
+    lines.push('', 'Collect the following information over the course of the conversation:');
+    for (const f of ctx.fields) {
+      lines.push(`- ${f.label}${f.required ? ' (required)' : ' (optional)'}`);
+    }
+    lines.push(
+      '',
+      'Once you have all the required information, thank the person and let them know you are done.',
+    );
   }
 
   return lines.join('\n');

@@ -1,9 +1,9 @@
 {
-  "name": "ai-intake-assistant",
+  "name": "brevio",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "AI Intake Assistant — conversational intake platform with OpenAI + Stripe subscriptions",
+  "description": "Brevio — conversational AI intake platform with Claude + Stripe subscriptions",
   "scripts": {
     "dev": "vite",
     "dev:vercel": "vercel dev",
@@ -14,9 +14,11 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",
+    "@supabase/supabase-js": "^2.108.2",
     "dotenv": "^17.4.2",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.18.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.11",

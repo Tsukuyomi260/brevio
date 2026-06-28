@@ -11,7 +11,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   return res.status(200).json({
-    message: 'AI Intake Assistant API is alive',
+    message: 'Brevio API is alive',
     time: new Date().toISOString(),
   });
 }

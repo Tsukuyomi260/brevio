@@ -1,6 +1,6 @@
-# AI Intake Assistant
+# Brevio
 
-> A conversational AI intake platform for service professionals — collects structured client information through a guided chat (Claude), with a Free/Pro subscription flow (Stripe).
+> **Brevio** — a conversational AI intake platform for service professionals. Collects structured client information through a guided chat (Claude), with a Free/Pro subscription flow (Stripe).
 
 **Status:** 🚧 In development · Step 1/10 (scaffold) · portfolio demo (Stripe in Test mode).
 

@@ -5,39 +5,42 @@ import {
   buildSystemPrompt,
   CHAT_MODEL,
   CHAT_MAX_TOKENS,
-  type IntakeContext,
+  type FieldToCollect,
 } from './_lib/anthropic';
+import { getSupabaseAdmin } from './_lib/supabase';
+
+interface ChatRequestBody {
+  slug?: string;
+  conversation_id?: string | null;
+  user_message?: string;
+}
 
 type Role = 'user' | 'assistant';
-interface ChatMessage {
-  role: Role;
+interface DbMessage {
+  role: Role | 'system';
   content: string;
 }
 
-interface ChatRequestBody extends IntakeContext {
-  messages?: unknown;
-}
+/** Free plan: max conversations per calendar month. */
+const FREE_MONTHLY_QUOTA = 10;
 
-/** Hard cap on conversation length (TRD §9.4: 30 exchanges max). */
-const MAX_MESSAGES = 60;
+/** Hard cap on history length sent to the model (TRD §9.4: ~30 exchanges). */
+const MAX_HISTORY = 60;
 
-function isChatMessage(m: unknown): m is ChatMessage {
-  if (typeof m !== 'object' || m === null) return false;
-  const { role, content } = m as Record<string, unknown>;
-  return (
-    (role === 'user' || role === 'assistant') &&
-    typeof content === 'string' &&
-    content.trim().length > 0
-  );
+function startOfMonthISO(): string {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
 }
 
 /**
- * POST /api/chat — Step 2: minimal Claude dialogue.
+ * POST /api/chat — Step 5: config-driven, server-owned conversation.
  *
- * Body: { messages: {role,content}[], businessName?, profession?, instructions? }
- * Returns: { assistant_message }
+ * Body: { slug, conversation_id?, user_message }
+ * Returns: { conversation_id, assistant_message, is_complete }
  *
- * No DB / quota / persistence yet — that arrives in Steps 3+.
+ * The server fetches the pro's config by slug, builds the full system prompt,
+ * creates/loads the conversation, persists every message, and enforces the
+ * Free-plan quota. The client never sees the prompt or writes the DB.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -46,49 +49,125 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const body = (req.body ?? {}) as ChatRequestBody;
-  const { messages, businessName, profession, instructions } = body;
+  const slug = body.slug?.trim();
+  const userMessage = body.user_message?.trim();
+  let conversationId = body.conversation_id ?? null;
 
-  if (!Array.isArray(messages) || messages.length === 0) {
-    return res.status(400).json({ error: 'messages must be a non-empty array' });
-  }
-  if (messages.length > MAX_MESSAGES) {
-    return res.status(400).json({ error: `Too many messages (max ${MAX_MESSAGES})` });
-  }
-  if (!messages.every(isChatMessage)) {
-    return res
-      .status(400)
-      .json({ error: 'each message needs role (user|assistant) and non-empty content' });
-  }
+  if (!slug) return res.status(400).json({ error: 'slug is required' });
+  if (!userMessage) return res.status(400).json({ error: 'user_message is required' });
 
   try {
+    const supabase = getSupabaseAdmin();
+
+    // 1. Resolve the pro by slug.
+    const { data: profile, error: profileErr } = await supabase
+      .from('profiles')
+      .select('id, plan, business_name, profession, intake_config')
+      .eq('slug', slug)
+      .maybeSingle();
+    if (profileErr) throw profileErr;
+    if (!profile) return res.status(404).json({ error: 'Unknown intake link' });
+
+    // 2. New conversation? Enforce the Free quota, then create it.
+    if (!conversationId) {
+      if (profile.plan !== 'pro') {
+        const { count, error: countErr } = await supabase
+          .from('conversations')
+          .select('id', { count: 'exact', head: true })
+          .eq('profile_id', profile.id)
+          .gte('started_at', startOfMonthISO());
+        if (countErr) throw countErr;
+        if ((count ?? 0) >= FREE_MONTHLY_QUOTA) {
+          return res.status(402).json({
+            error: 'quota_reached',
+            message: 'This professional is not accepting new requests right now.',
+          });
+        }
+      }
+
+      const { data: created, error: createErr } = await supabase
+        .from('conversations')
+        .insert({ profile_id: profile.id })
+        .select('id')
+        .single();
+      if (createErr) throw createErr;
+      conversationId = created.id as string;
+    } else {
+      // Existing conversation must belong to this pro.
+      const { data: conv, error: convErr } = await supabase
+        .from('conversations')
+        .select('id, profile_id')
+        .eq('id', conversationId)
+        .maybeSingle();
+      if (convErr) throw convErr;
+      if (!conv || conv.profile_id !== profile.id) {
+        return res.status(404).json({ error: 'Unknown conversation' });
+      }
+    }
+
+    // 3. Load prior history (ascending), then append the new user message.
+    const { data: history, error: histErr } = await supabase
+      .from('messages')
+      .select('role, content')
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: true })
+      .limit(MAX_HISTORY);
+    if (histErr) throw histErr;
+
+    const apiMessages = ((history ?? []) as DbMessage[])
+      .filter((m): m is { role: Role; content: string } => m.role !== 'system')
+      .map((m) => ({ role: m.role, content: m.content }));
+    apiMessages.push({ role: 'user', content: userMessage });
+
+    // 4. Build the full per-pro system prompt and call Claude.
+    const cfg = (profile.intake_config ?? {}) as {
+      system_prompt_addition?: string;
+      fields_to_collect?: FieldToCollect[];
+    };
     const anthropic = getAnthropic();
     const response = await anthropic.messages.create({
       model: CHAT_MODEL,
       max_tokens: CHAT_MAX_TOKENS,
-      system: buildSystemPrompt({ businessName, profession, instructions }),
-      messages: messages as ChatMessage[],
+      system: buildSystemPrompt({
+        businessName: profile.business_name,
+        profession: profile.profession,
+        instructions: cfg.system_prompt_addition,
+        fields: cfg.fields_to_collect,
+      }),
+      messages: apiMessages,
     });
 
-    const assistant_message = response.content
+    const assistantMessage = response.content
       .filter((block): block is Anthropic.TextBlock => block.type === 'text')
       .map((block) => block.text)
       .join('')
       .trim();
-
-    if (!assistant_message) {
+    if (!assistantMessage) {
       return res.status(502).json({ error: 'Empty response from model' });
     }
 
-    return res.status(200).json({ assistant_message });
+    // 5. Persist both messages (user first, then assistant — distinct timestamps
+    //    keep reload order correct).
+    await supabase
+      .from('messages')
+      .insert({ conversation_id: conversationId, role: 'user', content: userMessage });
+    await supabase
+      .from('messages')
+      .insert({ conversation_id: conversationId, role: 'assistant', content: assistantMessage });
+
+    return res.status(200).json({
+      conversation_id: conversationId,
+      assistant_message: assistantMessage,
+      is_complete: false,
+    });
   } catch (err) {
     if (err instanceof Anthropic.RateLimitError) {
-      return res.status(429).json({ error: 'Rate limited by Anthropic, try again shortly' });
+      return res.status(429).json({ error: 'Rate limited, try again shortly' });
     }
     if (err instanceof Anthropic.APIError) {
-      return res.status(502).json({ error: 'Anthropic request failed' });
+      return res.status(502).json({ error: 'AI request failed' });
     }
     const detail = err instanceof Error ? err.message : 'unknown error';
-    // Missing key or unexpected server error.
     return res.status(500).json({ error: detail });
   }
 }

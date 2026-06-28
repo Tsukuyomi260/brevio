@@ -1,65 +1,27 @@
-import { useEffect, useState } from 'react';
-import ChatTester from './components/ChatTester.tsx';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { AuthProvider } from './auth/AuthProvider';
+import Landing from './pages/Landing';
+import Login from './pages/Login';
+import Signup from './pages/Signup';
+import Onboarding from './pages/Onboarding';
+import Dashboard from './pages/Dashboard';
+import Intake from './pages/Intake';
+import NotFound from './pages/NotFound';
 
-type HealthState =
-  | { status: 'loading' }
-  | { status: 'ok'; message: string; time: string }
-  | { status: 'error'; detail: string };
-
-function App() {
-  const [health, setHealth] = useState<HealthState>({ status: 'loading' });
-
-  useEffect(() => {
-    fetch('/api/hello')
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = (await res.json()) as { message: string; time: string };
-        setHealth({ status: 'ok', message: data.message, time: data.time });
-      })
-      .catch((err: unknown) => {
-        const detail = err instanceof Error ? err.message : 'unknown error';
-        setHealth({ status: 'error', detail });
-      });
-  }, []);
-
+export default function App() {
   return (
-    <main className="min-h-dvh bg-slate-50 text-slate-900 flex items-center justify-center p-6">
-      <div className="w-full max-w-md space-y-6 text-center py-8">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight">AI Intake Assistant</h1>
-          <p className="text-slate-600">
-            Conversational intake for service professionals. Powered by OpenAI,
-            billed with Stripe.
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-medium text-slate-500 mb-2">API health</p>
-          {health.status === 'loading' && (
-            <p className="text-slate-400">Checking…</p>
-          )}
-          {health.status === 'ok' && (
-            <div className="space-y-1">
-              <p className="font-semibold text-emerald-600">● {health.message}</p>
-              <p className="text-xs text-slate-400">{health.time}</p>
-            </div>
-          )}
-          {health.status === 'error' && (
-            <div className="space-y-1">
-              <p className="font-semibold text-amber-600">● API unreachable</p>
-              <p className="text-xs text-slate-400">
-                {health.detail} — run <code>vercel dev</code> to enable /api.
-              </p>
-            </div>
-          )}
-        </div>
-
-        <ChatTester />
-
-        <p className="text-xs text-slate-400">Step 2 · first Claude call (/api/chat)</p>
-      </div>
-    </main>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/onboarding" element={<Onboarding />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/intake/:slug" element={<Intake />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
-
-export default App;
