@@ -1,6 +1,6 @@
 # AI Intake Assistant
 
-> A conversational AI intake platform for service professionals — collects structured client information through a guided chat (OpenAI), with a Free/Pro subscription flow (Stripe).
+> A conversational AI intake platform for service professionals — collects structured client information through a guided chat (Claude), with a Free/Pro subscription flow (Stripe).
 
 **Status:** 🚧 In development · Step 1/10 (scaffold) · portfolio demo (Stripe in Test mode).
 
@@ -13,7 +13,7 @@ A professional (dentist, lawyer, agent, consultant…) configures an AI assistan
 - **Frontend:** React 18 + Vite + TypeScript + Tailwind CSS (mobile-first)
 - **Backend:** Vercel Functions (serverless Node.js)
 - **Database / Auth:** Supabase (PostgreSQL + Row Level Security + Auth)
-- **AI:** OpenAI API (`gpt-4o-mini`)
+- **AI:** Anthropic Claude API (`claude-haiku-4-5`)
 - **Payments:** Stripe Checkout + Customer Portal + webhooks
 
 ## Local development
@@ -50,7 +50,7 @@ See [.env.example](.env.example). `VITE_*` vars are public (browser-safe). All o
 ## Roadmap
 
 1. ✅ **Setup + hello-world function**
-2. ⬜ First OpenAI call via `/api/chat`
+2. ⬜ First Claude call via `/api/chat`
 3. ⬜ Supabase schema + Auth + RLS
 4. ⬜ Mobile-first chat UI
 5. ⬜ Config-driven conversation loop

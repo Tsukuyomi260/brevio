@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import ChatTester from './components/ChatTester.tsx';
 
 type HealthState =
   | { status: 'loading' }
@@ -23,7 +24,7 @@ function App() {
 
   return (
     <main className="min-h-dvh bg-slate-50 text-slate-900 flex items-center justify-center p-6">
-      <div className="w-full max-w-md space-y-6 text-center">
+      <div className="w-full max-w-md space-y-6 text-center py-8">
         <div className="space-y-2">
           <h1 className="text-3xl font-bold tracking-tight">AI Intake Assistant</h1>
           <p className="text-slate-600">
@@ -53,7 +54,9 @@ function App() {
           )}
         </div>
 
-        <p className="text-xs text-slate-400">Step 1 · scaffold + hello-world</p>
+        <ChatTester />
+
+        <p className="text-xs text-slate-400">Step 2 · first Claude call (/api/chat)</p>
       </div>
     </main>
   );
