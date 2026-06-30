@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { Toaster } from 'sonner';
 import { AuthProvider } from './auth/AuthProvider';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
@@ -22,6 +23,7 @@ export default function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
+      <Toaster position="bottom-center" richColors />
     </AuthProvider>
   );
 }

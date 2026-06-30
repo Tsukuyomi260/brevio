@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
+import { toast } from 'sonner';
+import { AIInput } from '@/components/ui/ai-input';
 
 interface PublicProfile {
   business_name: string;
@@ -105,10 +107,11 @@ function Chat({
   // real history; we keep a local copy just for rendering.
   const [messages, setMessages] = useState<Msg[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [blocked, setBlocked] = useState<string | null>(null);
+  const [ended, setEnded] = useState(false);
+  const [finishing, setFinishing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   function scrollToBottom() {
@@ -117,13 +120,20 @@ function Chat({
     });
   }
 
-  async function send(e: FormEvent) {
-    e.preventDefault();
-    const text = input.trim();
-    if (!text || sending || blocked) return;
+  // Once the conversation exists, nudge the visitor toward the Finish button.
+  useEffect(() => {
+    if (conversationId) {
+      toast('Done answering?', {
+        description: 'Tap “Finish” at the top right to send your answers.',
+      });
+    }
+  }, [conversationId]);
 
-    setMessages((prev) => [...prev, { role: 'user', content: text }]);
-    setInput('');
+  async function sendText(text: string) {
+    const t = text.trim();
+    if (!t || sending || blocked) return;
+
+    setMessages((prev) => [...prev, { role: 'user', content: t }]);
     setError(null);
     setSending(true);
     scrollToBottom();
@@ -135,7 +145,7 @@ function Chat({
         body: JSON.stringify({
           slug,
           conversation_id: conversationId,
-          user_message: text,
+          user_message: t,
         }),
       });
       const data = await res.json();
@@ -156,21 +166,72 @@ function Chat({
     }
   }
 
+  async function finish() {
+    if (!conversationId || finishing) return;
+    setFinishing(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversation_id: conversationId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      setEnded(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'request failed');
+    } finally {
+      setFinishing(false);
+    }
+  }
+
+  if (ended) {
+    return (
+      <main className="min-h-dvh bg-slate-50 flex items-center justify-center p-6">
+        <div className="w-full max-w-md space-y-3 text-center">
+          <div className="animate-brevio-pop mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-3xl text-emerald-600">
+            ✓
+          </div>
+          <h1 className="animate-brevio-rise text-xl font-bold text-slate-900">
+            Thank you!
+          </h1>
+          <p className="animate-brevio-rise-delay text-slate-600">
+            Your information has been sent. {profile.business_name} will get back
+            to you soon.
+          </p>
+          <p className="animate-brevio-rise-delay text-xs text-slate-400">
+            Powered by Brevio
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="flex flex-col h-dvh bg-slate-50">
-      <header className="border-b border-slate-200 bg-white px-4 py-3">
-        <h1 className="text-sm font-semibold text-slate-900">{profile.business_name}</h1>
-        <p className="text-xs text-slate-400">{profile.profession}</p>
+      <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
+        <div>
+          <h1 className="text-sm font-semibold text-slate-900">{profile.business_name}</h1>
+          <p className="text-xs text-slate-400">{profile.profession}</p>
+        </div>
+        {conversationId && !blocked && (
+          <button
+            onClick={finish}
+            disabled={finishing}
+            className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+          >
+            {finishing ? 'Finishing…' : 'Finish'}
+          </button>
+        )}
       </header>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-        <Bubble role="assistant">{welcome}</Bubble>
+        <Bubble role="assistant" text={welcome} />
         {messages.map((m, i) => (
-          <Bubble key={i} role={m.role}>
-            {m.content}
-          </Bubble>
+          <Bubble key={i} role={m.role} text={m.content} />
         ))}
-        {sending && <p className="text-sm text-slate-400">Typing…</p>}
+        {sending && <ThinkingBubble />}
         {error && <p className="text-sm text-amber-600">⚠ {error}</p>}
         {blocked && (
           <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
@@ -180,30 +241,21 @@ function Chat({
       </div>
 
       {!blocked && (
-        <form
-          onSubmit={send}
-          className="flex gap-2 border-t border-slate-200 bg-white p-3"
-        >
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
+        <div className="border-t border-slate-200 bg-white px-2">
+          <AIInput
             placeholder="Type your answer…"
-            className="flex-1 rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-slate-500"
+            onSubmit={sendText}
+            disabled={sending}
+            minHeight={52}
+            maxHeight={160}
           />
-          <button
-            type="submit"
-            disabled={sending || !input.trim()}
-            className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-40"
-          >
-            Send
-          </button>
-        </form>
+        </div>
       )}
     </main>
   );
 }
 
-function Bubble({ role, children }: { role: 'user' | 'assistant'; children: ReactNode }) {
+function Bubble({ role, text }: { role: 'user' | 'assistant'; text: string }) {
   const isUser = role === 'user';
   return (
     <div className={isUser ? 'text-right' : 'text-left'}>
@@ -215,7 +267,46 @@ function Bubble({ role, children }: { role: 'user' | 'assistant'; children: Reac
             : 'bg-white text-slate-800 border border-slate-200')
         }
       >
-        {children}
+        {isUser ? text : <RevealText text={text} />}
+      </span>
+    </div>
+  );
+}
+
+/** Reveals an assistant reply word-by-word — a "streaming" cascade.
+ *  Whitespace (incl. newlines) is rendered as-is; only words animate. */
+function RevealText({ text }: { text: string }) {
+  const tokens = text.split(/(\s+)/);
+  const wordCount = tokens.filter((t) => t && !/^\s+$/.test(t)).length;
+  let wi = -1;
+  return (
+    <>
+      {tokens.map((tok, i) => {
+        if (tok === '') return null;
+        if (/^\s+$/.test(tok)) return <span key={i}>{tok}</span>;
+        wi += 1;
+        return (
+          <span
+            key={i}
+            className="brevio-word"
+            style={{ animationDelay: `${(wi / Math.max(wordCount, 1)) * 0.9}s` }}
+          >
+            {tok}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
+/** Animated "assistant is thinking" indicator. */
+function ThinkingBubble() {
+  return (
+    <div className="text-left">
+      <span className="brevio-thinking inline-flex items-center gap-1.5 rounded-2xl border bg-white px-4 py-3.5">
+        <span className="brevio-dot" style={{ animationDelay: '0s' }} />
+        <span className="brevio-dot" style={{ animationDelay: '0.18s' }} />
+        <span className="brevio-dot" style={{ animationDelay: '0.36s' }} />
       </span>
     </div>
   );
