@@ -1,8 +1,24 @@
 @import 'tailwindcss';
 
+/* ── Brevio design tokens ─────────────────────────────────────────────
+   Palette inspired by nas.com: warm near-black ink, off-white paper,
+   a single gold accent used sparingly (key moments only). */
+@theme {
+  --font-sans: 'Figtree', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Fragment Mono', ui-monospace, 'SF Mono', monospace;
+
+  --color-ink: #1b1b18; /* warm near-black — primary text & buttons */
+  --color-ink-soft: #4a5565; /* secondary text */
+  --color-ink-faint: #9ba1a5; /* tertiary text, placeholders */
+  --color-paper: #fafafa; /* page background */
+  --color-line: #e9e7e2; /* warm hairline borders */
+  --color-accent: #ffce00; /* gold — CTAs & highlights only */
+  --color-accent-deep: #947300; /* text on gold */
+}
+
 @layer components {
   .input {
-    @apply w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500;
+    @apply w-full rounded-lg border border-line bg-white px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-ink-soft;
   }
 }
 
