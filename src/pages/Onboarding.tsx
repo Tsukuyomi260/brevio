@@ -60,11 +60,12 @@ export default function Onboarding() {
   }
 
   return (
-    <main className="min-h-dvh bg-slate-50 flex items-center justify-center p-6">
-      <form onSubmit={onSubmit} className="w-full max-w-lg space-y-4">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold text-slate-900">Set up your assistant</h1>
-          <p className="text-sm text-slate-500">
+    <main className="min-h-dvh bg-paper text-ink flex items-center justify-center p-6">
+      <form onSubmit={onSubmit} className="rise card w-full max-w-lg p-7 space-y-4">
+        <div className="space-y-1 pb-1">
+          <p className="mono-label">✦ Step 1 of 1</p>
+          <h1 className="font-display text-2xl font-bold tracking-tight">Set up your assistant</h1>
+          <p className="text-sm text-ink-soft">
             This shapes the conversation your clients will have.
           </p>
         </div>
@@ -120,11 +121,7 @@ export default function Onboarding() {
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
-        <button
-          type="submit"
-          disabled={saving}
-          className="w-full rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
-        >
+        <button type="submit" disabled={saving} className="btn-gold w-full">
           {saving ? 'Saving…' : 'Create my assistant'}
         </button>
       </form>
@@ -135,7 +132,7 @@ export default function Onboarding() {
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block space-y-1">
-      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <span className="text-sm font-medium text-ink">{label}</span>
       {children}
     </label>
   );

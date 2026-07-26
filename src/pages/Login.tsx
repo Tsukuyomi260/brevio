@@ -29,9 +29,14 @@ export default function Login() {
   }
 
   return (
-    <main className="min-h-dvh bg-slate-50 flex items-center justify-center p-6">
-      <form onSubmit={onSubmit} className="w-full max-w-sm space-y-4">
-        <h1 className="text-2xl font-bold text-slate-900">Log in</h1>
+    <main className="min-h-dvh bg-paper text-ink flex items-center justify-center p-6">
+      <form onSubmit={onSubmit} className="rise card w-full max-w-sm p-7 space-y-4">
+        <div className="space-y-1 pb-1">
+          <Link to="/" className="font-mono text-[11px] text-ink-faint hover:text-ink transition-colors">
+            ← Brevio
+          </Link>
+          <h1 className="font-display text-2xl font-bold tracking-tight">Welcome back</h1>
+        </div>
 
         <input
           type="email"
@@ -39,7 +44,7 @@ export default function Login() {
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+          className="input"
         />
         <input
           type="password"
@@ -47,22 +52,18 @@ export default function Login() {
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+          className="input"
         />
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
-        >
+        <button type="submit" disabled={loading} className="btn-gold w-full">
           {loading ? 'Logging in…' : 'Log in'}
         </button>
 
-        <p className="text-sm text-slate-500 text-center">
+        <p className="text-sm text-ink-soft text-center">
           No account?{' '}
-          <Link to="/signup" className="text-slate-900 underline">
+          <Link to="/signup" className="text-ink font-medium underline underline-offset-2">
             Sign up
           </Link>
         </p>

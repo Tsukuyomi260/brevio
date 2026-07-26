@@ -117,9 +117,9 @@ export default function Dashboard() {
     <main className="min-h-dvh bg-paper text-ink">
       <div className="mx-auto w-full max-w-2xl px-5 py-8 space-y-8">
         {/* ── Header ─────────────────────────────────────────────── */}
-        <header className="flex items-start justify-between gap-4">
+        <header className="rise flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">{profile.business_name}</h1>
+            <h1 className="font-display text-2xl font-bold tracking-tight">{profile.business_name}</h1>
             <p className="text-sm text-ink-soft mt-0.5">{profile.profession}</p>
           </div>
           <div className="flex items-center gap-3 pt-1">
@@ -141,7 +141,7 @@ export default function Dashboard() {
         </header>
 
         {/* ── Public link ────────────────────────────────────────── */}
-        <section className="rounded-[14px] border border-line bg-white p-5 space-y-3">
+        <section className="rise rise-1 card p-5 space-y-3">
           <div className="flex items-baseline justify-between">
             <h2 className="text-sm font-semibold">Your intake link</h2>
             <a
@@ -159,7 +159,7 @@ export default function Dashboard() {
             </code>
             <button
               onClick={copyLink}
-              className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
+              className="rounded-[13px] bg-accent px-4 py-2 text-sm font-semibold text-ink transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_6px_16px_rgba(255,206,0,0.35)]"
             >
               {copied ? 'Copied ✓' : 'Copy'}
             </button>
@@ -170,7 +170,7 @@ export default function Dashboard() {
         </section>
 
         {/* ── Conversations ──────────────────────────────────────── */}
-        <section className="space-y-3">
+        <section className="rise rise-2 space-y-3">
           <div className="flex items-baseline justify-between px-0.5">
             <h2 className="text-sm font-semibold">Conversations</h2>
             {convs.status === 'ready' && (
@@ -195,20 +195,20 @@ export default function Dashboard() {
           )}
 
           {convs.status === 'loading' && (
-            <div className="rounded-[14px] border border-line bg-white p-8 text-center text-sm text-ink-faint">
+            <div className="card p-8 text-center text-sm text-ink-faint">
               Loading conversations…
             </div>
           )}
 
           {convs.status === 'error' && (
-            <div className="rounded-[14px] border border-line bg-white p-5 text-sm text-ink-soft">
+            <div className="card p-5 text-sm text-ink-soft">
               Couldn’t load conversations.
               <span className="block mt-1 text-xs text-ink-faint">{convs.detail}</span>
             </div>
           )}
 
           {convs.status === 'ready' && convs.rows.length === 0 && (
-            <div className="rounded-[14px] border border-line bg-white p-10 text-center space-y-1.5">
+            <div className="card p-10 text-center space-y-1.5">
               <p className="text-sm font-medium">No conversations yet</p>
               <p className="text-sm text-ink-faint">
                 Share your intake link — the first summaries will land here.
@@ -228,7 +228,7 @@ export default function Dashboard() {
             ))}
         </section>
 
-        <p className="text-center text-xs text-ink-faint pt-2">Powered by Brevio</p>
+        <p className="text-center font-mono text-[11px] text-ink-faint pt-2">Powered by Claude ✦ Brevio</p>
       </div>
     </main>
   );
@@ -256,7 +256,7 @@ function ConversationCard({
     typeof v === 'string' && v.trim() ? v.trim() : null;
 
   return (
-    <article className="rounded-[14px] border border-line bg-white overflow-hidden">
+    <article className="card overflow-hidden">
       <button
         onClick={onToggle}
         className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-paper/60 transition-colors"

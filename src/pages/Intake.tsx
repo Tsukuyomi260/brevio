@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
-import { toast } from 'sonner';
 import { AIInput } from '@/components/ui/ai-input';
 
 interface PublicProfile {
@@ -58,7 +57,7 @@ export default function Intake() {
     return (
       <Centered>
         Couldn’t load this page.
-        <span className="block text-xs text-slate-400 mt-1">{load.detail}</span>
+        <span className="block text-xs text-ink-faint mt-1">{load.detail}</span>
       </Centered>
     );
   }
@@ -70,22 +69,22 @@ export default function Intake() {
 
   if (!started) {
     return (
-      <main className="min-h-dvh bg-slate-50 flex items-center justify-center p-6">
+      <main className="min-h-dvh bg-paper flex items-center justify-center p-6">
         <div className="w-full max-w-md space-y-6 text-center">
           <div className="space-y-2">
-            <h1 className="text-2xl font-bold text-slate-900">
+            <h1 className="text-2xl font-bold text-ink">
               {profile.business_name}
             </h1>
-            <p className="text-sm text-slate-500">{profile.profession}</p>
+            <p className="text-sm text-ink-soft">{profile.profession}</p>
           </div>
-          <p className="text-slate-700">{welcome}</p>
+          <p className="text-ink-soft">{welcome}</p>
           <button
             onClick={() => setStarted(true)}
             className="w-full rounded-lg bg-slate-900 px-4 py-3 text-sm font-medium text-white"
           >
             Start
           </button>
-          <p className="text-xs text-slate-400">Powered by Brevio</p>
+          <p className="text-xs text-ink-faint">Powered by Brevio</p>
         </div>
       </main>
     );
@@ -120,14 +119,12 @@ function Chat({
     });
   }
 
-  // Once the conversation exists, nudge the visitor toward the Finish button.
-  useEffect(() => {
-    if (conversationId) {
-      toast('Done answering?', {
-        description: 'Tap “Finish” at the top right to send your answers.',
-      });
-    }
-  }, [conversationId]);
+  // Detect when the assistant has finished collecting (they say so explicitly).
+  const isConvComplete = messages.length > 0 &&
+    messages[messages.length - 1]?.role === 'assistant' &&
+    /\b(voilà|toutes les informations|prêt|merci|done|fin|terminé|collected|finished)\b/i.test(
+      messages[messages.length - 1]?.content || ''
+    );
 
   async function sendText(text: string) {
     const t = text.trim();
@@ -188,19 +185,19 @@ function Chat({
 
   if (ended) {
     return (
-      <main className="min-h-dvh bg-slate-50 flex items-center justify-center p-6">
+      <main className="min-h-dvh bg-paper flex items-center justify-center p-6">
         <div className="w-full max-w-md space-y-3 text-center">
-          <div className="animate-brevio-pop mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-3xl text-emerald-600">
+          <div className="animate-brevio-pop mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-accent text-3xl text-ink">
             ✓
           </div>
-          <h1 className="animate-brevio-rise text-xl font-bold text-slate-900">
+          <h1 className="animate-brevio-rise font-display text-xl font-bold text-ink">
             Thank you!
           </h1>
-          <p className="animate-brevio-rise-delay text-slate-600">
+          <p className="animate-brevio-rise-delay text-ink-soft">
             Your information has been sent. {profile.business_name} will get back
             to you soon.
           </p>
-          <p className="animate-brevio-rise-delay text-xs text-slate-400">
+          <p className="animate-brevio-rise-delay font-mono text-[11px] text-ink-faint">
             Powered by Brevio
           </p>
         </div>
@@ -209,11 +206,11 @@ function Chat({
   }
 
   return (
-    <main className="flex flex-col h-dvh bg-slate-50">
-      <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
+    <main className="flex flex-col h-dvh bg-paper">
+      <header className="flex items-center justify-between border-b border-line bg-white px-4 py-3">
         <div>
-          <h1 className="text-sm font-semibold text-slate-900">{profile.business_name}</h1>
-          <p className="text-xs text-slate-400">{profile.profession}</p>
+          <h1 className="font-display text-sm font-semibold text-ink">{profile.business_name}</h1>
+          <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint">{profile.profession}</p>
         </div>
         {conversationId && !blocked && (
           <button
@@ -241,11 +238,16 @@ function Chat({
       </div>
 
       {!blocked && (
-        <div className="border-t border-slate-200 bg-white px-2">
+        <div className="border-t border-line bg-white space-y-3 px-4 py-3">
+          {isConvComplete && (
+            <div className="bg-accent text-ink px-4 py-3 rounded-[12px] text-center text-sm font-semibold">
+              ✓ You're all set! Click <span className="font-mono">Finish</span> above to submit.
+            </div>
+          )}
           <AIInput
             placeholder="Type your answer…"
             onSubmit={sendText}
-            disabled={sending}
+            disabled={sending || isConvComplete}
             minHeight={52}
             maxHeight={160}
           />
@@ -263,8 +265,8 @@ function Bubble({ role, text }: { role: 'user' | 'assistant'; text: string }) {
         className={
           'inline-block rounded-2xl px-3.5 py-2 text-sm max-w-[85%] whitespace-pre-wrap ' +
           (isUser
-            ? 'bg-slate-900 text-white'
-            : 'bg-white text-slate-800 border border-slate-200')
+            ? 'bg-ink text-white'
+            : 'bg-white text-ink border border-line')
         }
       >
         {isUser ? text : <RevealText text={text} />}
@@ -314,8 +316,8 @@ function ThinkingBubble() {
 
 function Centered({ children }: { children: ReactNode }) {
   return (
-    <main className="min-h-dvh bg-slate-50 flex items-center justify-center p-6 text-center">
-      <p className="text-slate-600 text-sm">{children}</p>
+    <main className="min-h-dvh bg-paper flex items-center justify-center p-6 text-center">
+      <p className="text-ink-soft text-sm">{children}</p>
     </main>
   );
 }
