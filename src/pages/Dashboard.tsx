@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
+import { Copy, Check } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import Loading from '../components/Loading';
 import { supabase } from '../lib/supabase';
 import type { FieldToCollect } from '../types';
 
-/** Free plan: keep in sync with FREE_MONTHLY_QUOTA in api/chat.ts. */
 const FREE_MONTHLY_QUOTA = 10;
 
 type ConvStatus = 'in_progress' | 'completed' | 'abandoned';
@@ -28,7 +28,6 @@ function startOfMonthISO(): string {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
 }
 
-/** "14:32" today, "Yesterday" or "12 Jul" otherwise. */
 function shortDate(iso: string): string {
   const d = new Date(iso);
   const now = new Date();
@@ -40,8 +39,6 @@ function shortDate(iso: string): string {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
-/** Best display name for a conversation: a "name"-ish summary field, else the
- *  first non-empty value, else a status fallback. */
 function convTitle(row: ConvRow): string {
   const s = row.summary;
   if (s) {
@@ -63,9 +60,9 @@ function convTitle(row: ConvRow): string {
 
 export default function Dashboard() {
   const { loading, session, profile, signOut } = useAuth();
-  const [copied, setCopied] = useState(false);
   const [convs, setConvs] = useState<ConvState>({ status: 'loading' });
   const [openId, setOpenId] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
 
   const profileId = profile?.id;
   useEffect(() => {
@@ -107,11 +104,28 @@ export default function Dashboard() {
   const fields = profile.intake_config?.fields_to_collect ?? [];
   const isPro = profile.plan === 'pro';
 
-  async function copyLink() {
+  const copyPublicLink = async () => {
     await navigator.clipboard.writeText(publicLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  }
+    setCopied('link');
+    setTimeout(() => setCopied(null), 1500);
+  };
+
+  // Stats
+  const completed = convs.status === 'ready' ? convs.rows.filter((r) => r.status === 'completed').length : 0;
+  const abandoned = convs.status === 'ready' ? convs.rows.filter((r) => r.status === 'abandoned').length : 0;
+  const inProgress = convs.status === 'ready' ? convs.rows.filter((r) => r.status === 'in_progress').length : 0;
+
+  // Completed fiches (the main product)
+  const completedRows =
+    convs.status === 'ready' ? convs.rows.filter((r) => r.status === 'completed').sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime()) : [];
+
+  // Pending (in progress or abandoned)
+  const pendingRows =
+    convs.status === 'ready'
+      ? convs.rows
+          .filter((r) => r.status === 'in_progress' || r.status === 'abandoned')
+          .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())
+      : [];
 
   return (
     <main className="min-h-dvh bg-paper text-ink">
@@ -131,10 +145,7 @@ export default function Dashboard() {
             >
               {isPro ? 'Pro' : 'Free'}
             </span>
-            <button
-              onClick={signOut}
-              className="text-sm text-ink-faint hover:text-ink transition-colors"
-            >
+            <button onClick={signOut} className="text-sm text-ink-faint hover:text-ink transition-colors">
               Sign out
             </button>
           </div>
@@ -144,12 +155,7 @@ export default function Dashboard() {
         <section className="rise rise-1 card p-5 space-y-3">
           <div className="flex items-baseline justify-between">
             <h2 className="text-sm font-semibold">Your intake link</h2>
-            <a
-              href={publicLink}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs text-ink-soft underline underline-offset-2 hover:text-ink"
-            >
+            <a href={publicLink} target="_blank" rel="noreferrer" className="text-xs text-ink-soft underline underline-offset-2 hover:text-ink">
               Preview
             </a>
           </div>
@@ -157,34 +163,34 @@ export default function Dashboard() {
             <code className="flex-1 truncate rounded-lg bg-paper border border-line px-3 py-2 font-mono text-xs text-ink-soft">
               {publicLink}
             </code>
-            <button
-              onClick={copyLink}
-              className="rounded-[13px] bg-accent px-4 py-2 text-sm font-semibold text-ink transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_6px_16px_rgba(255,206,0,0.35)]"
-            >
-              {copied ? 'Copied ✓' : 'Copy'}
+            <button onClick={copyPublicLink} className="btn-gold" title="Copy to clipboard">
+              {copied === 'link' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
             </button>
           </div>
           <p className="text-xs text-ink-faint">
-            Share it with clients — they chat, you get a structured summary below.
+            Share this link with clients. They'll chat with your assistant — you get a structured summary.
           </p>
         </section>
 
-        {/* ── Conversations ──────────────────────────────────────── */}
-        <section className="rise rise-2 space-y-3">
-          <div className="flex items-baseline justify-between px-0.5">
-            <h2 className="text-sm font-semibold">Conversations</h2>
-            {convs.status === 'ready' && (
-              <span className="font-mono text-xs text-ink-faint">
-                {isPro
-                  ? `${convs.monthCount} this month`
-                  : `${convs.monthCount} / ${FREE_MONTHLY_QUOTA} this month`}
-              </span>
-            )}
-          </div>
+        {/* ── Stats ──────────────────────────────────────────────── */}
+        {convs.status === 'ready' && (
+          <section className="rise rise-2 grid grid-cols-3 gap-3">
+            <StatCard label="Completed" value={completed} accent="gold" />
+            <StatCard label="Pending" value={inProgress} accent="ink" />
+            <StatCard label="Abandoned" value={abandoned} accent="faint" />
+          </section>
+        )}
 
-          {/* Free-plan quota bar — the one place gold shows up on its own. */}
-          {convs.status === 'ready' && !isPro && (
-            <div className="h-1 rounded-full bg-line overflow-hidden">
+        {/* ── Quota bar (Free plan only) ────────────────────────── */}
+        {convs.status === 'ready' && !isPro && (
+          <div className="rise rise-3 space-y-1">
+            <div className="flex items-baseline justify-between">
+              <p className="text-xs font-medium text-ink-soft">Monthly quota</p>
+              <span className="font-mono text-xs text-ink-faint">
+                {convs.monthCount} / {FREE_MONTHLY_QUOTA}
+              </span>
+            </div>
+            <div className="h-2 rounded-full bg-line overflow-hidden">
               <div
                 className="h-full rounded-full bg-accent transition-all"
                 style={{
@@ -192,45 +198,89 @@ export default function Dashboard() {
                 }}
               />
             </div>
-          )}
+          </div>
+        )}
 
-          {convs.status === 'loading' && (
-            <div className="card p-8 text-center text-sm text-ink-faint">
-              Loading conversations…
-            </div>
-          )}
+        {/* ── Completed summaries ────────────────────────────────– */}
+        {convs.status === 'ready' && (
+          <section className="rise rise-4 space-y-3">
+            <h2 className="text-sm font-semibold">
+              {completed === 0 ? 'No summaries yet' : `${completed} summar${completed === 1 ? 'y' : 'ies'} collected`}
+            </h2>
 
-          {convs.status === 'error' && (
-            <div className="card p-5 text-sm text-ink-soft">
-              Couldn’t load conversations.
-              <span className="block mt-1 text-xs text-ink-faint">{convs.detail}</span>
-            </div>
-          )}
+            {completed === 0 && (
+              <div className="card p-10 text-center space-y-2">
+                <p className="text-sm font-medium">Waiting for your first client…</p>
+                <p className="text-sm text-ink-faint">
+                  Share your intake link above. When clients finish, their summaries will appear here.
+                </p>
+              </div>
+            )}
 
-          {convs.status === 'ready' && convs.rows.length === 0 && (
-            <div className="card p-10 text-center space-y-1.5">
-              <p className="text-sm font-medium">No conversations yet</p>
-              <p className="text-sm text-ink-faint">
-                Share your intake link — the first summaries will land here.
-              </p>
-            </div>
-          )}
-
-          {convs.status === 'ready' &&
-            convs.rows.map((row) => (
+            {completedRows.map((row) => (
               <ConversationCard
                 key={row.id}
                 row={row}
                 fields={fields}
                 open={openId === row.id}
                 onToggle={() => setOpenId(openId === row.id ? null : row.id)}
+                onCopySummary={() => {
+                  navigator.clipboard.writeText(JSON.stringify(row.summary, null, 2));
+                  setCopied(row.id);
+                  setTimeout(() => setCopied(null), 1500);
+                }}
+                wasCopied={copied === row.id}
               />
             ))}
-        </section>
+          </section>
+        )}
 
-        <p className="text-center font-mono text-[11px] text-ink-faint pt-2">Powered by Claude ✦ Brevio</p>
+        {/* ── Pending / Abandoned ────────────────────────────────– */}
+        {convs.status === 'ready' && pendingRows.length > 0 && (
+          <section className="rise rise-5 space-y-3">
+            <h2 className="text-sm font-semibold text-ink-faint">Pending & Abandoned</h2>
+            {pendingRows.map((row) => (
+              <div key={row.id} className="card p-4 text-sm text-ink-faint flex items-center justify-between">
+                <span>
+                  {convTitle(row)} · {shortDate(row.started_at)}
+                  {row.status === 'in_progress' && ' · in progress'}
+                  {row.status === 'abandoned' && ' · abandoned'}
+                </span>
+              </div>
+            ))}
+          </section>
+        )}
+
+        {convs.status === 'loading' && (
+          <div className="card p-8 text-center text-sm text-ink-faint">
+            Loading conversations…
+          </div>
+        )}
+
+        {convs.status === 'error' && (
+          <div className="card p-5 text-sm text-ink-soft">
+            Couldn't load conversations.
+            <span className="block mt-1 text-xs text-ink-faint">{convs.detail}</span>
+          </div>
+        )}
+
+        <p className="text-center font-mono text-[11px] text-ink-faint">Powered by Claude ✦ Brevio</p>
       </div>
     </main>
+  );
+}
+
+function StatCard({ label, value, accent }: { label: string; value: number; accent: 'gold' | 'ink' | 'faint' }) {
+  const colorMap = {
+    gold: 'bg-accent text-accent-deep',
+    ink: 'bg-ink text-white',
+    faint: 'bg-line/50 text-ink-faint',
+  };
+  return (
+    <div className={`card p-4 text-center space-y-1 ${colorMap[accent]}`}>
+      <p className="text-2xl font-bold">{value}</p>
+      <p className="text-xs font-medium opacity-80">{label}</p>
+    </div>
   );
 }
 
@@ -239,21 +289,20 @@ function ConversationCard({
   fields,
   open,
   onToggle,
+  onCopySummary,
+  wasCopied,
 }: {
   row: ConvRow;
   fields: FieldToCollect[];
   open: boolean;
   onToggle: () => void;
+  onCopySummary: () => void;
+  wasCopied: boolean;
 }) {
-  const inProgress = row.status === 'in_progress';
-
-  // Configured fields first (pro's own labels), then any extra summary keys.
   const summary = row.summary ?? {};
   const knownKeys = new Set(fields.map((f) => f.key));
   const extraKeys = Object.keys(summary).filter((k) => !knownKeys.has(k));
-
-  const display = (v: unknown) =>
-    typeof v === 'string' && v.trim() ? v.trim() : null;
+  const display = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
   return (
     <article className="card overflow-hidden">
@@ -262,48 +311,43 @@ function ConversationCard({
         className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-paper/60 transition-colors"
       >
         <span className="flex items-center gap-2.5 min-w-0">
-          {inProgress && (
-            <span className="h-2 w-2 shrink-0 rounded-full bg-accent" title="In progress" />
-          )}
+          <span className="h-2 w-2 shrink-0 rounded-full bg-accent" />
           <span className="truncate text-sm font-medium">{convTitle(row)}</span>
-          {inProgress && <span className="text-xs text-ink-faint shrink-0">in progress</span>}
         </span>
-        <span className="font-mono text-xs text-ink-faint shrink-0">
-          {shortDate(row.started_at)}
-        </span>
+        <span className="font-mono text-xs text-ink-faint shrink-0">{shortDate(row.started_at)}</span>
       </button>
 
       {open && (
-        <div className="border-t border-line px-5 py-4">
-          {inProgress ? (
-            <p className="text-sm text-ink-faint">
-              The visitor hasn’t finished yet — the summary will appear once they’re done.
-            </p>
-          ) : (
-            <dl className="space-y-2.5">
-              {fields.map((f) => (
-                <div key={f.key} className="flex gap-4 text-sm">
-                  <dt className="w-32 shrink-0 text-ink-faint">{f.label}</dt>
-                  <dd className="text-ink whitespace-pre-wrap">
-                    {display(summary[f.key]) ?? <span className="text-ink-faint">—</span>}
-                  </dd>
-                </div>
-              ))}
-              {extraKeys.map((k) => (
-                <div key={k} className="flex gap-4 text-sm">
-                  <dt className="w-32 shrink-0 text-ink-faint capitalize">
-                    {k.replace(/_/g, ' ')}
-                  </dt>
-                  <dd className="text-ink whitespace-pre-wrap">
-                    {display(summary[k]) ?? <span className="text-ink-faint">—</span>}
-                  </dd>
-                </div>
-              ))}
-              {fields.length === 0 && extraKeys.length === 0 && (
-                <p className="text-sm text-ink-faint">No summary recorded.</p>
-              )}
-            </dl>
-          )}
+        <div className="border-t border-line px-5 py-4 space-y-4">
+          <dl className="space-y-2.5">
+            {fields.map((f) => (
+              <div key={f.key} className="flex gap-4 text-sm">
+                <dt className="w-32 shrink-0 text-ink-faint">{f.label}</dt>
+                <dd className="text-ink whitespace-pre-wrap">{display(summary[f.key]) ?? <span className="text-ink-faint">—</span>}</dd>
+              </div>
+            ))}
+            {extraKeys.map((k) => (
+              <div key={k} className="flex gap-4 text-sm">
+                <dt className="w-32 shrink-0 text-ink-faint capitalize">{k.replace(/_/g, ' ')}</dt>
+                <dd className="text-ink whitespace-pre-wrap">{display(summary[k]) ?? <span className="text-ink-faint">—</span>}</dd>
+              </div>
+            ))}
+            {fields.length === 0 && extraKeys.length === 0 && (
+              <p className="text-sm text-ink-faint">No summary recorded.</p>
+            )}
+          </dl>
+
+          <button onClick={onCopySummary} className="flex items-center gap-2 text-xs font-medium text-accent hover:text-accent-deep transition-colors">
+            {wasCopied ? (
+              <>
+                <Check className="w-3.5 h-3.5" /> Copied to clipboard
+              </>
+            ) : (
+              <>
+                <Copy className="w-3.5 h-3.5" /> Copy summary as JSON
+              </>
+            )}
+          </button>
         </div>
       )}
     </article>
