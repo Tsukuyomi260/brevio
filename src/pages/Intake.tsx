@@ -67,20 +67,30 @@ export default function Intake() {
   if (!started) {
     return (
       <main className="min-h-dvh bg-paper flex items-center justify-center p-6">
-        <div className="w-full max-w-md space-y-6 text-center">
-          <div className="space-y-2">
-            <h1 className="text-2xl font-bold text-ink">
+        <div className="w-full max-w-md space-y-8 text-center">
+          <div className="space-y-3 animate-brevio-rise">
+            <div className="text-4xl">✨</div>
+            <h1 className="font-display text-3xl font-bold text-ink">
               {profile.business_name}
             </h1>
-            <p className="text-sm text-ink-soft">{profile.profession}</p>
+            <p className="font-mono text-xs uppercase tracking-widest text-ink-faint">
+              {profile.profession}
+            </p>
+            <p className="text-sm text-ink-soft leading-relaxed">
+              Let's get to know you better. A quick conversation to prepare for your appointment.
+            </p>
           </div>
+
           <button
             onClick={() => setStarted(true)}
-            className="w-full rounded-lg bg-slate-900 px-4 py-3 text-sm font-medium text-white"
+            className="btn-gold w-full animate-brevio-rise-delay"
           >
-            Start
+            Start Intake
           </button>
-          <p className="text-xs text-ink-faint">Powered by Brevio</p>
+
+          <p className="font-mono text-[11px] text-ink-faint">
+            Powered by Brevio
+          </p>
         </div>
       </main>
     );
@@ -126,7 +136,7 @@ function Chat({
           body: JSON.stringify({
             slug,
             conversation_id: null,
-            user_message: 'Commencez par poser la première question requise pour débuter l\'entretien.',
+            user_message: 'Commençons. Qu\'est-ce qui m\'amène aujourd\'hui?',
           }),
         });
         const data = await res.json();
