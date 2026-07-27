@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
 import { getAnthropic, CHAT_MODEL, type FieldToCollect } from './_lib/anthropic';
 import { getSupabaseAdmin } from './_lib/supabase';
+import { normalizePhone, normalizeEmail } from './_lib/contacts';
 
 interface SummarizeBody {
   conversation_id?: string;
@@ -132,6 +133,61 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
       .eq('id', conversation_id);
     if (updErr) throw updErr;
+
+    // Upsert into contacts for recurring client detection (fire-and-forget).
+    // Extract identifiers from summary.
+    const summary_obj = typeof summary === 'object' ? (summary as Record<string, unknown>) : {};
+    const nameField = Object.entries(summary_obj).find(([k]) =>
+      /name|nom/i.test(k)
+    );
+    const phoneField = Object.entries(summary_obj).find(([k]) =>
+      /phone|téléphone|tel/i.test(k)
+    );
+    const emailField = Object.entries(summary_obj).find(([k]) =>
+      /email|mail|e-mail/i.test(k)
+    );
+
+    const fullName = nameField ? String(nameField[1]) : null;
+    const phoneStr = phoneField ? String(phoneField[1]) : null;
+    const emailStr = emailField ? String(emailField[1]) : null;
+
+    const phone = normalizePhone(phoneStr);
+    const email = normalizeEmail(emailStr);
+
+    // Try to upsert by phone first (higher priority), fallback to email.
+    // Fire-and-forget, don't block response on contact upsert.
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    if (phone) {
+      supabase
+        .from('contacts')
+        .upsert(
+          {
+            profile_id: conv!.profile_id,
+            phone_normalized: phone,
+            email_normalized: email,
+            full_name: fullName,
+            last_summary: summary,
+            visit_count: 1,
+            last_seen: new Date().toISOString(),
+          },
+          { onConflict: 'profile_id,phone_normalized' }
+        );
+    } else if (email) {
+      supabase
+        .from('contacts')
+        .upsert(
+          {
+            profile_id: conv!.profile_id,
+            phone_normalized: null,
+            email_normalized: email,
+            full_name: fullName,
+            last_summary: summary,
+            visit_count: 1,
+            last_seen: new Date().toISOString(),
+          },
+          { onConflict: 'profile_id,email_normalized' }
+        );
+    }
 
     return res.status(200).json({ summary });
   } catch (err) {

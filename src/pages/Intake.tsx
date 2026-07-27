@@ -63,9 +63,6 @@ export default function Intake() {
   }
 
   const { profile } = load;
-  const welcome =
-    profile.welcome_message?.trim() ||
-    `Hi! Before your appointment with ${profile.business_name}, I'd like to ask you a few quick questions.`;
 
   if (!started) {
     return (
@@ -77,7 +74,6 @@ export default function Intake() {
             </h1>
             <p className="text-sm text-ink-soft">{profile.profession}</p>
           </div>
-          <p className="text-ink-soft">{welcome}</p>
           <button
             onClick={() => setStarted(true)}
             className="w-full rounded-lg bg-slate-900 px-4 py-3 text-sm font-medium text-white"
@@ -90,17 +86,15 @@ export default function Intake() {
     );
   }
 
-  return <Chat slug={slug!} profile={profile} welcome={welcome} />;
+  return <Chat slug={slug!} profile={profile} />;
 }
 
 function Chat({
   slug,
   profile,
-  welcome,
 }: {
   slug: string;
   profile: PublicProfile;
-  welcome: string;
 }) {
   // `welcome` is display-only (first assistant bubble). The server owns the
   // real history; we keep a local copy just for rendering.
@@ -119,10 +113,52 @@ function Chat({
     });
   }
 
-  // Detect when the assistant has finished collecting (they say so explicitly).
+  // On mount, ask Claude to pose the first question to kickstart the conversation.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      setSending(true);
+      setError(null);
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            slug,
+            conversation_id: null,
+            user_message: 'Commencez par poser la première question requise pour débuter l\'entretien.',
+          }),
+        });
+        const data = await res.json();
+
+        if (res.status === 402) {
+          if (active) setBlocked(data.message ?? 'This professional is not accepting new requests right now.');
+          return;
+        }
+        if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+
+        if (active) {
+          setConversationId(data.conversation_id as string);
+          setMessages([{ role: 'assistant', content: data.assistant_message }]);
+          scrollToBottom();
+        }
+      } catch (err) {
+        if (active) {
+          setError(err instanceof Error ? err.message : 'Failed to start conversation');
+        }
+      } finally {
+        if (active) setSending(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [slug]);
+
+  // Detect when the assistant has finished collecting (they say the completion phrase).
   const isConvComplete = messages.length > 0 &&
     messages[messages.length - 1]?.role === 'assistant' &&
-    /\b(voilà|toutes les informations|prêt|merci|done|fin|terminé|collected|finished)\b/i.test(
+    /La conversation est complète/i.test(
       messages[messages.length - 1]?.content || ''
     );
 
@@ -205,6 +241,30 @@ function Chat({
     );
   }
 
+  if (blocked) {
+    return (
+      <main className="min-h-dvh bg-paper flex items-center justify-center p-6">
+        <div className="w-full max-w-md space-y-3 text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-3xl">
+            ⏸
+          </div>
+          <h1 className="font-display text-xl font-bold text-ink">
+            {profile.business_name} is temporarily unavailable
+          </h1>
+          <p className="text-sm text-ink-soft">
+            {blocked}
+          </p>
+          <p className="text-xs text-ink-faint">
+            Please try again later or contact {profile.business_name} directly.
+          </p>
+          <p className="font-mono text-[11px] text-ink-faint">
+            Powered by Brevio
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="flex flex-col h-dvh bg-paper">
       <header className="flex items-center justify-between border-b border-line bg-white px-4 py-3">
@@ -224,7 +284,6 @@ function Chat({
       </header>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-        <Bubble role="assistant" text={welcome} />
         {messages.map((m, i) => (
           <Bubble key={i} role={m.role} text={m.content} />
         ))}

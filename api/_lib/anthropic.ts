@@ -64,8 +64,8 @@ export function buildSystemPrompt(ctx: IntakeContext = {}): string {
     '- Ask one question at a time.',
     '- Stay warm, concise, and professional.',
     '- Never give medical, legal, or professional advice — you only collect information.',
-    '- Write in clear, natural English.',
-    '- When you have gathered what you need, thank the person and let them know you are done.',
+    '- Respond entirely in French.',
+    '- When you have gathered what you need, end with: "La conversation est complète. Merci et à bientôt!"',
   ];
 
   if (ctx.instructions?.trim()) {

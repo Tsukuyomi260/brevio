@@ -8,6 +8,7 @@ import {
   type FieldToCollect,
 } from './_lib/anthropic';
 import { getSupabaseAdmin } from './_lib/supabase';
+import { detectIdentifiers, normalizePhone, normalizeEmail } from './_lib/contacts';
 
 interface ChatRequestBody {
   slug?: string;
@@ -118,6 +119,62 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .filter((m): m is { role: Role; content: string } => m.role !== 'system')
       .map((m) => ({ role: m.role, content: m.content }));
     apiMessages.push({ role: 'user', content: userMessage });
+
+    // 3b. Recurring client detection: if we find an identifier, greet them by name.
+    // Only inject on the first user message (empty history = new conversation).
+    if ((history ?? []).length === 0) {
+      const { phone, email, name } = detectIdentifiers(userMessage);
+      const lookupPhone = phone ? normalizePhone(phone) : null;
+      const lookupEmail = email ? normalizeEmail(email) : null;
+
+      console.log(`[ContactDetection] user_message="${userMessage}" phone="${lookupPhone}" email="${lookupEmail}" name="${name}"`);
+
+      if (lookupPhone || lookupEmail) {
+        // Try to find an existing contact — handle null values properly.
+        let query = supabase
+          .from('contacts')
+          .select('id, full_name, visit_count, last_summary')
+          .eq('profile_id', profile.id);
+
+        if (lookupPhone && lookupEmail) {
+          query = query.or(`phone_normalized.eq.${lookupPhone},email_normalized.eq.${lookupEmail}`);
+        } else if (lookupPhone) {
+          query = query.eq('phone_normalized', lookupPhone);
+        } else if (lookupEmail) {
+          query = query.eq('email_normalized', lookupEmail);
+        }
+
+        const contacts = await query.maybeSingle();
+
+        console.log(`[ContactDetection] query_error=${contacts.error?.message ?? 'none'} found=${!!contacts.data}`);
+
+        if (!contacts.error && contacts.data) {
+          // Recurring client! Inject a system note for Claude.
+          const c = contacts.data;
+          const greeting = name ? name : c.full_name || 'this valued client';
+          let note = `The visitor is a returning client: ${greeting}. They've visited ${c.visit_count} times before.`;
+          if (c.last_summary && typeof c.last_summary === 'object') {
+            const prevReason = (c.last_summary as Record<string, unknown>)['reason'] ||
+              (c.last_summary as Record<string, unknown>)['motif'];
+            if (prevReason) {
+              note += ` Last time, they came for: ${prevReason}.`;
+            }
+          }
+          note += ' Greet them warmly by name.';
+          apiMessages.unshift({ role: 'user', content: note });
+
+          // Update visit_count and last_seen (fire-and-forget, don't block)
+          // eslint-disable-next-line @typescript-eslint/no-floating-promises
+          supabase
+            .from('contacts')
+            .update({
+              visit_count: c.visit_count + 1,
+              last_seen: new Date().toISOString(),
+            })
+            .eq('id', c.id);
+        }
+      }
+    }
 
     // 4. Build the full per-pro system prompt and call Claude.
     const cfg = (profile.intake_config ?? {}) as {
