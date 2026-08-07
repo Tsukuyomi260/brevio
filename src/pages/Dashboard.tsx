@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { Copy, Check, Download, ChevronDown } from 'lucide-react';
+import { Copy, Check, Download, ChevronDown, RotateCw, Repeat } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
 import { useAuth } from '../auth/AuthProvider';
 import Loading from '../components/Loading';
@@ -8,6 +8,9 @@ import { supabase } from '../lib/supabase';
 import type { FieldToCollect } from '../types';
 
 const FREE_MONTHLY_QUOTA = 10;
+
+/** Conversations fetched for the list. Stat counts are queried separately. */
+const LIST_LIMIT = 50;
 
 type ConvStatus = 'in_progress' | 'completed' | 'abandoned';
 
@@ -19,10 +22,36 @@ interface ConvRow {
   completed_at: string | null;
 }
 
+interface MsgRow {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+/** A client seen more than once, from the `contacts` table. */
+interface ContactRow {
+  id: string;
+  full_name: string | null;
+  visit_count: number;
+  last_seen: string;
+}
+
+/** All-time counts — queried, not derived from the truncated list. */
+interface Totals {
+  completed: number;
+  in_progress: number;
+  abandoned: number;
+}
+
 type ConvState =
   | { status: 'loading' }
   | { status: 'error'; detail: string }
-  | { status: 'ready'; rows: ConvRow[]; monthCount: number };
+  | {
+      status: 'ready';
+      rows: ConvRow[];
+      monthCount: number;
+      totals: Totals;
+      contacts: ContactRow[];
+    };
 
 function startOfMonthISO(): string {
   const now = new Date();
@@ -69,24 +98,50 @@ export default function Dashboard() {
   const [convs, setConvs] = useState<ConvState>({ status: 'loading' });
   const [openId, setOpenId] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
 
   const profileId = profile?.id;
   useEffect(() => {
     if (!profileId) return;
     let active = true;
     (async () => {
-      const [listRes, countRes] = await Promise.all([
-        supabase
-          .from('conversations')
-          .select('id, status, summary, started_at, completed_at')
-          .order('started_at', { ascending: false })
-          .limit(50),
+      const countByStatus = (s: ConvStatus) =>
         supabase
           .from('conversations')
           .select('id', { count: 'exact', head: true })
-          .gte('started_at', startOfMonthISO()),
-      ]);
+          .eq('profile_id', profileId)
+          .eq('status', s);
+
+      const [listRes, monthRes, doneRes, pendingRes, goneRes, contactsRes] =
+        await Promise.all([
+          supabase
+            .from('conversations')
+            .select('id, status, summary, started_at, completed_at')
+            .eq('profile_id', profileId)
+            .order('started_at', { ascending: false })
+            .limit(LIST_LIMIT),
+          supabase
+            .from('conversations')
+            .select('id', { count: 'exact', head: true })
+            .eq('profile_id', profileId)
+            .gte('started_at', startOfMonthISO()),
+          countByStatus('completed'),
+          countByStatus('in_progress'),
+          countByStatus('abandoned'),
+          // Returning clients. Tolerated as empty when migration 0002 has not
+          // been applied yet — a missing table must not blank the dashboard.
+          supabase
+            .from('contacts')
+            .select('id, full_name, visit_count, last_seen')
+            .eq('profile_id', profileId)
+            .gt('visit_count', 1)
+            .order('last_seen', { ascending: false })
+            .limit(10),
+        ]);
+
       if (!active) return;
+      setRefreshing(false);
       if (listRes.error) {
         setConvs({ status: 'error', detail: listRes.error.message });
         return;
@@ -94,13 +149,19 @@ export default function Dashboard() {
       setConvs({
         status: 'ready',
         rows: (listRes.data ?? []) as ConvRow[],
-        monthCount: countRes.count ?? 0,
+        monthCount: monthRes.count ?? 0,
+        totals: {
+          completed: doneRes.count ?? 0,
+          in_progress: pendingRes.count ?? 0,
+          abandoned: goneRes.count ?? 0,
+        },
+        contacts: contactsRes.error ? [] : ((contactsRes.data ?? []) as ContactRow[]),
       });
     })();
     return () => {
       active = false;
     };
-  }, [profileId]);
+  }, [profileId, refreshKey]);
 
   if (loading) return <Loading />;
   if (!session) return <Navigate to="/login" replace />;
@@ -116,9 +177,16 @@ export default function Dashboard() {
     setTimeout(() => setCopied(null), 1500);
   };
 
-  const completed = convs.status === 'ready' ? convs.rows.filter((r) => r.status === 'completed').length : 0;
-  const abandoned = convs.status === 'ready' ? convs.rows.filter((r) => r.status === 'abandoned').length : 0;
-  const inProgress = convs.status === 'ready' ? convs.rows.filter((r) => r.status === 'in_progress').length : 0;
+  // All-time counts come from the count queries; the row list is capped at
+  // LIST_LIMIT and would under-report once a pro passes 50 conversations.
+  const completed = convs.status === 'ready' ? convs.totals.completed : 0;
+  const abandoned = convs.status === 'ready' ? convs.totals.abandoned : 0;
+  const inProgress = convs.status === 'ready' ? convs.totals.in_progress : 0;
+
+  const refresh = () => {
+    setRefreshing(true);
+    setRefreshKey((k) => k + 1);
+  };
 
   const completedRows =
     convs.status === 'ready' ? convs.rows.filter((r) => r.status === 'completed').sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime()) : [];
@@ -140,6 +208,14 @@ export default function Dashboard() {
             <p className="text-sm text-ink-soft mt-0.5">{profile.profession}</p>
           </div>
           <div className="flex items-center gap-3 pt-1">
+            <button
+              onClick={refresh}
+              disabled={refreshing}
+              title="Reload conversations"
+              className="text-ink-faint hover:text-ink transition-colors disabled:opacity-40"
+            >
+              <RotateCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
             <span
               className={
                 'rounded-full px-3 py-1 text-xs font-semibold ' +
@@ -204,6 +280,28 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* ── Returning clients ──────────────────────────────────– */}
+        {convs.status === 'ready' && convs.contacts.length > 0 && (
+          <section className="rise rise-3 space-y-3">
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <Repeat className="w-4 h-4 text-accent-deep" />
+              Returning clients
+            </h2>
+            <div className="card divide-y divide-line">
+              {convs.contacts.map((c) => (
+                <div key={c.id} className="flex items-center justify-between px-5 py-3">
+                  <span className="truncate text-sm font-medium">
+                    {c.full_name?.trim() || 'Unnamed client'}
+                  </span>
+                  <span className="shrink-0 font-mono text-xs text-ink-faint">
+                    {c.visit_count} visits · {shortDate(c.last_seen)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* ── Completed summaries ────────────────────────────────– */}
         {convs.status === 'ready' && (
           <section className="rise rise-4 space-y-3">
@@ -218,6 +316,12 @@ export default function Dashboard() {
                   Share your intake link above. When clients finish, their summaries will appear here.
                 </p>
               </div>
+            )}
+
+            {completed > completedRows.length && (
+              <p className="text-xs text-ink-faint">
+                Showing the {completedRows.length} most recent of {completed}.
+              </p>
             )}
 
             {completedRows.map((row, idx) => (
@@ -300,10 +404,36 @@ function ConversationCard({
   onToggle: () => void;
   onExportPDF: () => void;
 }) {
+  const [transcript, setTranscript] = useState<MsgRow[] | null>(null);
+  const [showTranscript, setShowTranscript] = useState(false);
+  const [transcriptError, setTranscriptError] = useState<string | null>(null);
+
   const summary = row.summary ?? {};
   const knownKeys = new Set(fields.map((f) => f.key));
   const extraKeys = Object.keys(summary).filter((k) => !knownKeys.has(k));
   const display = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+
+  // Fetched on demand — most cards are never expanded. RLS policy
+  // `messages_select_own` scopes this to the pro's own conversations.
+  async function toggleTranscript() {
+    if (transcript) {
+      setShowTranscript((v) => !v);
+      return;
+    }
+    setShowTranscript(true);
+    const { data, error } = await supabase
+      .from('messages')
+      .select('role, content')
+      .eq('conversation_id', row.id)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      setTranscriptError(error.message);
+      return;
+    }
+    setTranscriptError(null);
+    setTranscript(((data ?? []) as MsgRow[]).filter((m) => m.role !== 'system'));
+  }
 
   // Get preview of main info (name + reason)
   const name = fields.find((f) => /name|nom/i.test(f.key))?.key;
@@ -350,16 +480,72 @@ function ConversationCard({
           </dl>
 
           {/* Actions */}
-          <button
-            onClick={onExportPDF}
-            className="flex items-center gap-2 text-xs font-medium text-accent hover:text-accent-deep transition-colors"
-          >
-            <Download className="w-3.5 h-3.5" /> Export as PDF
-          </button>
+          <div className="flex items-center gap-5">
+            <button
+              onClick={onExportPDF}
+              className="flex items-center gap-2 text-xs font-medium text-accent-deep hover:text-ink transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" /> Export as PDF
+            </button>
+            <button
+              onClick={toggleTranscript}
+              className="text-xs font-medium text-ink-faint hover:text-ink transition-colors"
+            >
+              {showTranscript ? 'Hide transcript' : 'View transcript'}
+            </button>
+          </div>
+
+          {showTranscript && (
+            <div className="space-y-2 border-t border-line pt-4">
+              {transcriptError && (
+                <p className="text-xs text-ink-soft">Couldn't load the transcript. {transcriptError}</p>
+              )}
+              {!transcriptError && transcript === null && (
+                <p className="text-xs text-ink-faint">Loading…</p>
+              )}
+              {transcript?.length === 0 && (
+                <p className="text-xs text-ink-faint">No messages recorded.</p>
+              )}
+              {transcript?.map((m, i) => (
+                <div key={i} className={m.role === 'user' ? 'text-right' : 'text-left'}>
+                  <span
+                    className={
+                      'inline-block max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-1.5 text-xs ' +
+                      (m.role === 'user' ? 'bg-ink text-white' : 'bg-paper border border-line text-ink-soft')
+                    }
+                  >
+                    {m.content}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </article>
   );
+}
+
+/**
+ * Escape a value for interpolation into the PDF markup.
+ *
+ * Summary values are visitor-authored text passed through the model, and
+ * html2pdf renders this HTML in the document to rasterise it. Without escaping,
+ * an answer such as `<img src=x onerror=…>` would execute in the pro's
+ * authenticated session the moment they export.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/** Strip characters that are illegal or awkward in a download filename. */
+function safeFilePart(value: string): string {
+  return value.replace(/[^\p{L}\p{N} _-]/gu, '').trim().slice(0, 60) || 'client';
 }
 
 function exportToPDF(
@@ -372,13 +558,19 @@ function exportToPDF(
   const extraKeys = Object.keys(summary).filter((k) => !knownKeys.has(k));
   const display = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
-  // Build HTML for PDF
+  const block = (label: string, value: string | null) => `
+        <div style="margin-bottom: 18px;">
+          <p style="font-size: 12px; font-weight: 600; color: #4a5565; text-transform: uppercase; margin-bottom: 6px;">${escapeHtml(label)}</p>
+          <p style="font-size: 14px; color: #1b1b18; line-height: 1.5;">${value ? escapeHtml(value) : '—'}</p>
+        </div>
+      `;
+
   const html = `
     <div style="font-family: system-ui, sans-serif; padding: 40px; color: #1b1b18;">
-      <h1 style="font-size: 32px; font-weight: bold; margin-bottom: 8px;">${businessName}</h1>
+      <h1 style="font-size: 32px; font-weight: bold; margin-bottom: 8px;">${escapeHtml(businessName)}</h1>
       <p style="font-size: 14px; color: #4a5565; margin-bottom: 32px;">Client Intake Summary</p>
 
-      <h2 style="font-size: 20px; font-weight: bold; margin-bottom: 16px; color: #1b1b18;">${clientName}</h2>
+      <h2 style="font-size: 20px; font-weight: bold; margin-bottom: 16px; color: #1b1b18;">${escapeHtml(clientName)}</h2>
       <p style="font-size: 12px; color: #9ba1a5; margin-bottom: 24px;">${new Date().toLocaleDateString('en-GB', {
         year: 'numeric',
         month: 'long',
@@ -387,29 +579,8 @@ function exportToPDF(
 
       <hr style="border: none; border-top: 1px solid #e9e7e2; margin-bottom: 24px;" />
 
-      ${fields
-        .map((f) => {
-          const v = display(summary[f.key]);
-          return `
-        <div style="margin-bottom: 18px;">
-          <p style="font-size: 12px; font-weight: 600; color: #4a5565; text-transform: uppercase; margin-bottom: 6px;">${f.label}</p>
-          <p style="font-size: 14px; color: #1b1b18; line-height: 1.5;">${v || '—'}</p>
-        </div>
-      `;
-        })
-        .join('')}
-
-      ${extraKeys
-        .map((k) => {
-          const v = display(summary[k]);
-          return `
-        <div style="margin-bottom: 18px;">
-          <p style="font-size: 12px; font-weight: 600; color: #4a5565; text-transform: uppercase; margin-bottom: 6px;">${k.replace(/_/g, ' ')}</p>
-          <p style="font-size: 14px; color: #1b1b18; line-height: 1.5;">${v || '—'}</p>
-        </div>
-      `;
-        })
-        .join('')}
+      ${fields.map((f) => block(f.label, display(summary[f.key]))).join('')}
+      ${extraKeys.map((k) => block(k.replace(/_/g, ' '), display(summary[k]))).join('')}
 
       <hr style="border: none; border-top: 1px solid #e9e7e2; margin-top: 32px; margin-bottom: 16px;" />
       <p style="font-size: 11px; color: #9ba1a5; text-align: center;">Generated by Brevio • ${new Date().toLocaleTimeString('en-GB', {
@@ -422,7 +593,7 @@ function exportToPDF(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const opt: any = {
     margin: 0,
-    filename: `${clientName}-${businessName}-${new Date().toISOString().split('T')[0]}.pdf`,
+    filename: `${safeFilePart(clientName)}-${safeFilePart(businessName)}-${new Date().toISOString().split('T')[0]}.pdf`,
     image: { type: 'jpeg', quality: 0.98 },
     html2canvas: { scale: 2 },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },

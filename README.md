@@ -6,7 +6,7 @@
 
 ## What it does
 
-A professional (dentist, lawyer, agent, consultant…) configures an AI assistant, gets a public link `/intake/[slug]`, and shares it with clients. Visitors chat — no signup — and the AI collects the info the pro needs before the appointment. The pro reads a structured summary in their dashboard. Usage above the free quota unlocks via a Stripe subscription.
+A professional (dentist, lawyer, agent, consultant…) configures an AI assistant, gets a public link `/intake/[slug]`, and shares it with clients. Visitors chat — no signup — and the AI collects the info the pro needs before the appointment. The professional receive a brief of the users. Usage above the free quota unlocks via a Stripe subscription.
 
 ## Tech stack
 
@@ -49,15 +49,15 @@ See [.env.example](.env.example). `VITE_*` vars are public (browser-safe). All o
 
 ## Roadmap
 
-1. ✅ **Setup + hello-world function**
-2. ⬜ First Claude call via `/api/chat`
-3. ⬜ Supabase schema + Auth + RLS
-4. ⬜ Mobile-first chat UI
-5. ⬜ Config-driven conversation loop
-6. ⬜ Structured JSON summary + storage
-7. ⬜ Pro dashboard (summaries + plan)
-8. ⬜ Stripe Checkout (subscription)
-9. ⬜ Stripe webhook + edge cases
+1.  ✅ **Setup + hello-world function**
+2.  ⬜ First Claude call via `/api/chat`
+3.  ⬜ Supabase schema + Auth + RLS
+4.  ⬜ Mobile-first chat UI
+5.  ⬜ Config-driven conversation loop
+6.  ⬜ Structured JSON summary + storage
+7.  ⬜ Pro dashboard (summaries + plan)
+8.  ⬜ Stripe Checkout (subscription)
+9.  ⬜ Stripe webhook + edge cases
 10. ⬜ Deploy + polish + portfolio
 
 ## License

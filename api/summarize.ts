@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import Anthropic from '@anthropic-ai/sdk';
 import { getAnthropic, CHAT_MODEL, type FieldToCollect } from './_lib/anthropic';
 import { getSupabaseAdmin } from './_lib/supabase';
@@ -134,59 +135,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .eq('id', conversation_id);
     if (updErr) throw updErr;
 
-    // Upsert into contacts for recurring client detection (fire-and-forget).
-    // Extract identifiers from summary.
-    const summary_obj = typeof summary === 'object' ? (summary as Record<string, unknown>) : {};
-    const nameField = Object.entries(summary_obj).find(([k]) =>
-      /name|nom/i.test(k)
-    );
-    const phoneField = Object.entries(summary_obj).find(([k]) =>
-      /phone|téléphone|tel/i.test(k)
-    );
-    const emailField = Object.entries(summary_obj).find(([k]) =>
-      /email|mail|e-mail/i.test(k)
-    );
-
-    const fullName = nameField ? String(nameField[1]) : null;
-    const phoneStr = phoneField ? String(phoneField[1]) : null;
-    const emailStr = emailField ? String(emailField[1]) : null;
-
-    const phone = normalizePhone(phoneStr);
-    const email = normalizeEmail(emailStr);
-
-    // Try to upsert by phone first (higher priority), fallback to email.
-    // Fire-and-forget, don't block response on contact upsert.
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    if (phone) {
-      supabase
-        .from('contacts')
-        .upsert(
-          {
-            profile_id: conv!.profile_id,
-            phone_normalized: phone,
-            email_normalized: email,
-            full_name: fullName,
-            last_summary: summary,
-            visit_count: 1,
-            last_seen: new Date().toISOString(),
-          },
-          { onConflict: 'profile_id,phone_normalized' }
-        );
-    } else if (email) {
-      supabase
-        .from('contacts')
-        .upsert(
-          {
-            profile_id: conv!.profile_id,
-            phone_normalized: null,
-            email_normalized: email,
-            full_name: fullName,
-            last_summary: summary,
-            visit_count: 1,
-            last_seen: new Date().toISOString(),
-          },
-          { onConflict: 'profile_id,email_normalized' }
-        );
+    // Record the contact so a returning visitor is recognised next time.
+    // The summary is already saved, so a contact failure must not fail the
+    // request — but it must still be awaited (see recordContact).
+    try {
+      await recordContact(supabase, conv.profile_id, summary);
+    } catch (contactErr) {
+      const detail = contactErr instanceof Error ? contactErr.message : 'unknown error';
+      console.error('contact upsert failed:', detail);
     }
 
     return res.status(200).json({ summary });
@@ -200,4 +156,89 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const detail = err instanceof Error ? err.message : 'unknown error';
     return res.status(500).json({ error: detail });
   }
+}
+
+interface ContactRow {
+  id: string;
+  visit_count: number;
+}
+
+/** First summary value whose key matches `re`, as a trimmed string. */
+function pickField(summary: Record<string, unknown>, re: RegExp): string | null {
+  const hit = Object.entries(summary).find(([k]) => re.test(k));
+  if (!hit || typeof hit[1] !== 'string') return null;
+  return hit[1].trim() || null;
+}
+
+/**
+ * Create or refresh the `contacts` row for this visitor, bumping `visit_count`.
+ * This is the only place that owns `visit_count` — /api/chat reads contacts but
+ * never writes them, so a single completed conversation counts exactly once.
+ *
+ * NOTE: supabase-js query builders are thenables — the HTTP request is only
+ * issued from `then()`. Every call below must be awaited or nothing is sent.
+ */
+async function recordContact(
+  supabase: SupabaseClient,
+  profileId: string,
+  summary: unknown,
+): Promise<void> {
+  if (typeof summary !== 'object' || summary === null) return;
+  const fields = summary as Record<string, unknown>;
+
+  const phone = normalizePhone(pickField(fields, /phone|t[ée]l/i));
+  const email = normalizeEmail(pickField(fields, /e-?mail/i));
+  const fullName = pickField(fields, /name|nom/i);
+  if (!phone && !email) return;
+
+  // (profile_id, phone_normalized) and (profile_id, email_normalized) are both
+  // unique, so an upsert keyed on one can violate the other when a visitor
+  // gives a new phone for an email we already know. Resolve the row first.
+  // Two `.eq()` lookups rather than one `.or()`: these values come from model
+  // output and must never be interpolated into a PostgREST filter expression.
+  let existing: ContactRow | null = null;
+
+  for (const [column, value] of [
+    ['phone_normalized', phone],
+    ['email_normalized', email],
+  ] as const) {
+    if (!value || existing) continue;
+    const { data, error } = await supabase
+      .from('contacts')
+      .select('id, visit_count')
+      .eq('profile_id', profileId)
+      .eq(column, value)
+      .maybeSingle();
+    if (error) throw error;
+    existing = (data as ContactRow | null) ?? null;
+  }
+
+  const now = new Date().toISOString();
+
+  if (existing) {
+    // Only overwrite identifiers we actually captured this time.
+    const patch: Record<string, unknown> = {
+      last_summary: summary,
+      visit_count: existing.visit_count + 1,
+      last_seen: now,
+    };
+    if (phone) patch.phone_normalized = phone;
+    if (email) patch.email_normalized = email;
+    if (fullName) patch.full_name = fullName;
+
+    const { error } = await supabase.from('contacts').update(patch).eq('id', existing.id);
+    if (error) throw error;
+    return;
+  }
+
+  const { error } = await supabase.from('contacts').insert({
+    profile_id: profileId,
+    phone_normalized: phone,
+    email_normalized: email,
+    full_name: fullName,
+    last_summary: summary,
+    visit_count: 1,
+    last_seen: now,
+  });
+  if (error) throw error;
 }

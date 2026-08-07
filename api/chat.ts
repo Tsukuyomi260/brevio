@@ -1,11 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   getAnthropic,
   buildSystemPrompt,
   CHAT_MODEL,
   CHAT_MAX_TOKENS,
   type FieldToCollect,
+  type ReturningClient,
 } from './_lib/anthropic';
 import { getSupabaseAdmin } from './_lib/supabase';
 import { detectIdentifiers, normalizePhone, normalizeEmail } from './_lib/contacts';
@@ -120,60 +122,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .map((m) => ({ role: m.role, content: m.content }));
     apiMessages.push({ role: 'user', content: userMessage });
 
-    // 3b. Recurring client detection: if we find an identifier, greet them by name.
-    // Only inject on the first user message (empty history = new conversation).
+    // 3b. Recurring client detection — read-only. /api/summarize owns writes to
+    //     `contacts` (including visit_count), so nothing is updated here.
+    //     Only worth a lookup on the first message of a new conversation.
+    let returning: ReturningClient | null = null;
     if ((history ?? []).length === 0) {
-      const { phone, email, name } = detectIdentifiers(userMessage);
-      const lookupPhone = phone ? normalizePhone(phone) : null;
-      const lookupEmail = email ? normalizeEmail(email) : null;
-
-      console.log(`[ContactDetection] user_message="${userMessage}" phone="${lookupPhone}" email="${lookupEmail}" name="${name}"`);
-
-      if (lookupPhone || lookupEmail) {
-        // Try to find an existing contact — handle null values properly.
-        let query = supabase
-          .from('contacts')
-          .select('id, full_name, visit_count, last_summary')
-          .eq('profile_id', profile.id);
-
-        if (lookupPhone && lookupEmail) {
-          query = query.or(`phone_normalized.eq.${lookupPhone},email_normalized.eq.${lookupEmail}`);
-        } else if (lookupPhone) {
-          query = query.eq('phone_normalized', lookupPhone);
-        } else if (lookupEmail) {
-          query = query.eq('email_normalized', lookupEmail);
-        }
-
-        const contacts = await query.maybeSingle();
-
-        console.log(`[ContactDetection] query_error=${contacts.error?.message ?? 'none'} found=${!!contacts.data}`);
-
-        if (!contacts.error && contacts.data) {
-          // Recurring client! Inject a system note for Claude.
-          const c = contacts.data;
-          const greeting = name ? name : c.full_name || 'this valued client';
-          let note = `The visitor is a returning client: ${greeting}. They've visited ${c.visit_count} times before.`;
-          if (c.last_summary && typeof c.last_summary === 'object') {
-            const prevReason = (c.last_summary as Record<string, unknown>)['reason'] ||
-              (c.last_summary as Record<string, unknown>)['motif'];
-            if (prevReason) {
-              note += ` Last time, they came for: ${prevReason}.`;
-            }
-          }
-          note += ' Greet them warmly by name.';
-          apiMessages.unshift({ role: 'user', content: note });
-
-          // Update visit_count and last_seen (fire-and-forget, don't block)
-          // eslint-disable-next-line @typescript-eslint/no-floating-promises
-          supabase
-            .from('contacts')
-            .update({
-              visit_count: c.visit_count + 1,
-              last_seen: new Date().toISOString(),
-            })
-            .eq('id', c.id);
-        }
-      }
+      returning = await findReturningClient(supabase, profile.id, userMessage);
     }
 
     // 4. Build the full per-pro system prompt and call Claude.
@@ -190,6 +144,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         profession: profile.profession,
         instructions: cfg.system_prompt_addition,
         fields: cfg.fields_to_collect,
+        returningClient: returning ?? undefined,
       }),
       messages: apiMessages,
     });
@@ -227,4 +182,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const detail = err instanceof Error ? err.message : 'unknown error';
     return res.status(500).json({ error: detail });
   }
+}
+
+/**
+ * Look up a known contact from the identifiers in the visitor's first message.
+ * Read-only: /api/summarize owns every write to `contacts`.
+ *
+ * Returns null on any failure — a missed greeting is not worth failing the chat.
+ */
+async function findReturningClient(
+  supabase: SupabaseClient,
+  profileId: string,
+  message: string,
+): Promise<ReturningClient | null> {
+  const { phone, email } = detectIdentifiers(message);
+  const lookupPhone = normalizePhone(phone);
+  const lookupEmail = normalizeEmail(email);
+  if (!lookupPhone && !lookupEmail) return null;
+
+  try {
+    // Two `.eq()` lookups rather than one `.or()`: the `or()` filter takes a
+    // string expression, and a comma or paren in a value would alter it.
+    for (const [column, value] of [
+      ['phone_normalized', lookupPhone],
+      ['email_normalized', lookupEmail],
+    ] as const) {
+      if (!value) continue;
+      const { data, error } = await supabase
+        .from('contacts')
+        .select('full_name, visit_count, last_summary')
+        .eq('profile_id', profileId)
+        .eq(column, value)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) continue;
+
+      const lastSummary = (data.last_summary ?? {}) as Record<string, unknown>;
+      const previousReason = lastSummary.reason ?? lastSummary.motif;
+      return {
+        name: typeof data.full_name === 'string' ? data.full_name : null,
+        visitCount: typeof data.visit_count === 'number' ? data.visit_count : 1,
+        previousReason: typeof previousReason === 'string' ? previousReason : null,
+      };
+    }
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : 'unknown error';
+    console.error('returning-client lookup failed:', detail);
+  }
+  return null;
 }
