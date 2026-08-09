@@ -9,7 +9,7 @@ import {
   type FieldToCollect,
   type ReturningClient,
 } from './_lib/anthropic';
-import { getSupabaseAdmin } from './_lib/supabase';
+import { getSupabaseAdmin, describeDbError } from './_lib/supabase';
 import { detectIdentifiers, normalizePhone, normalizeEmail } from './_lib/contacts';
 
 interface ChatRequestBody {
@@ -179,8 +179,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (err instanceof Anthropic.APIError) {
       return res.status(502).json({ error: 'AI request failed' });
     }
-    const detail = err instanceof Error ? err.message : 'unknown error';
-    return res.status(500).json({ error: detail });
+    // Public endpoint: log the detail, return a generic message. Internal error
+    // text can carry table names, constraint values and visitor data.
+    console.error('chat failed:', err instanceof Error ? err.message : describeDbError(err));
+    return res.status(500).json({ error: 'Something went wrong, please try again' });
   }
 }
 
@@ -226,8 +228,7 @@ async function findReturningClient(
       };
     }
   } catch (err) {
-    const detail = err instanceof Error ? err.message : 'unknown error';
-    console.error('returning-client lookup failed:', detail);
+    console.error('returning-client lookup failed:', describeDbError(err));
   }
   return null;
 }

@@ -23,3 +23,24 @@ export function getSupabaseAdmin(): SupabaseClient {
   }
   return admin;
 }
+
+/**
+ * Describe a database error using only schema metadata — the SQLSTATE code and
+ * the constraint name. Never the raw message.
+ *
+ * Postgres embeds the offending values in its errors: a unique violation on
+ * `contacts` reads `Key (profile_id, phone_normalized)=(…, 0612345678) already
+ * exists`. Logging that message verbatim would put visitor phone numbers and
+ * e-mail addresses in the platform logs, where they are neither expected nor
+ * covered by the row-level policies protecting the tables.
+ */
+export function describeDbError(err: unknown): string {
+  if (typeof err !== 'object' || err === null) return 'unhandled database error';
+  const e = err as { code?: string; message?: string };
+  const constraint = e.message?.match(/constraint "([\w.]+)"/)?.[1];
+  const parts = [
+    e.code ? `code=${e.code}` : null,
+    constraint ? `constraint=${constraint}` : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join(' ') : 'unhandled database error';
+}

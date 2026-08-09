@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import Anthropic from '@anthropic-ai/sdk';
 import { getAnthropic, CHAT_MODEL, type FieldToCollect } from './_lib/anthropic';
-import { getSupabaseAdmin } from './_lib/supabase';
+import { getSupabaseAdmin, describeDbError } from './_lib/supabase';
 import { normalizePhone, normalizeEmail } from './_lib/contacts';
 
 interface SummarizeBody {
@@ -141,8 +141,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       await recordContact(supabase, conv.profile_id, summary);
     } catch (contactErr) {
-      const detail = contactErr instanceof Error ? contactErr.message : 'unknown error';
-      console.error('contact upsert failed:', detail);
+      console.error('contact upsert failed:', describeDbError(contactErr));
     }
 
     return res.status(200).json({ summary });
@@ -153,8 +152,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (err instanceof Anthropic.APIError) {
       return res.status(502).json({ error: 'AI request failed' });
     }
-    const detail = err instanceof Error ? err.message : 'unknown error';
-    return res.status(500).json({ error: detail });
+    // Public endpoint: log the detail, return a generic message. Internal error
+    // text can carry table names, constraint values and visitor data.
+    console.error('summarize failed:', err instanceof Error ? err.message : describeDbError(err));
+    return res.status(500).json({ error: 'Could not summarise this conversation' });
   }
 }
 

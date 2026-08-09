@@ -116,18 +116,19 @@ export function devApi(apiDir = 'api'): Plugin {
     apply: 'serve',
     configureServer(server) {
       const root = server.config.root;
-      const routes = collectRoutes(root, apiDir);
 
       server.config.logger.info(
-        `  ➜  API:      ${routes.length} local route(s) from ${apiDir}/`,
+        `  ➜  API:      ${collectRoutes(root, apiDir).length} local route(s) from ${apiDir}/`,
       );
 
       server.middlewares.use(async (req, res, next) => {
         const url = req.url ?? '';
         if (!url.startsWith(`/${apiDir}/`) && url !== `/${apiDir}`) return next();
 
+        // Rebuilt per request: adding an endpoint is a new file, and having to
+        // restart the server to see it is a papercut. The tree is small.
         const parsed = new URL(url, 'http://localhost');
-        const hit = matchRoute(routes, parsed.pathname);
+        const hit = matchRoute(collectRoutes(root, apiDir), parsed.pathname);
         if (!hit) return next();
 
         try {

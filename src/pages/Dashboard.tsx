@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Navigate } from 'react-router-dom';
-import { Copy, Check, Download, ChevronDown, RotateCw, Repeat } from 'lucide-react';
-import html2pdf from 'html2pdf.js';
+import { Navigate, useSearchParams } from 'react-router-dom';
+import { toast } from 'sonner';
+import { Copy, Check, Download, ChevronDown, RotateCw, Repeat, Sparkles } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import Loading from '../components/Loading';
 import { supabase } from '../lib/supabase';
@@ -100,6 +100,23 @@ export default function Dashboard() {
   const [copied, setCopied] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Returning from Stripe Checkout. The plan itself is flipped by the webhook,
+  // never by this redirect — a URL the user can type is not proof of payment.
+  const checkout = searchParams.get('checkout');
+  useEffect(() => {
+    if (!checkout) return;
+    if (checkout === 'success') {
+      toast.success('Payment received', {
+        description: 'Your Pro plan activates as soon as Stripe confirms it.',
+      });
+    } else if (checkout === 'cancelled') {
+      toast('Checkout cancelled', { description: 'Nothing was charged.' });
+    }
+    searchParams.delete('checkout');
+    setSearchParams(searchParams, { replace: true });
+  }, [checkout, searchParams, setSearchParams]);
 
   const profileId = profile?.id;
   useEffect(() => {
@@ -277,6 +294,10 @@ export default function Dashboard() {
                 }}
               />
             </div>
+            <UpgradeButton
+              accessToken={session.access_token}
+              atQuota={convs.monthCount >= FREE_MONTHLY_QUOTA}
+            />
           </div>
         )}
 
@@ -372,6 +393,47 @@ export default function Dashboard() {
         <p className="text-center font-mono text-[11px] text-ink-faint">Powered by Claude ✦ Brevio</p>
       </div>
     </main>
+  );
+}
+
+/**
+ * Starts Checkout. The request carries only the caller's JWT — the price and
+ * the account being upgraded are both resolved server-side in /api/checkout.
+ */
+function UpgradeButton({ accessToken, atQuota }: { accessToken: string; atQuota: boolean }) {
+  const [busy, setBusy] = useState(false);
+
+  async function upgrade() {
+    setBusy(true);
+    try {
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      window.location.href = data.url;
+    } catch (err) {
+      setBusy(false);
+      toast.error('Could not start the checkout', {
+        description: err instanceof Error ? err.message : 'Please try again.',
+      });
+    }
+  }
+
+  return (
+    <div className="pt-2">
+      <button onClick={upgrade} disabled={busy} className="btn-gold w-full gap-2">
+        <Sparkles className="w-4 h-4" />
+        {busy ? 'Opening checkout…' : 'Upgrade to Pro'}
+      </button>
+      {atQuota && (
+        <p className="mt-2 text-xs text-ink-soft">
+          You've used every free conversation this month — new visitors are being
+          turned away until you upgrade.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -548,12 +610,18 @@ function safeFilePart(value: string): string {
   return value.replace(/[^\p{L}\p{N} _-]/gu, '').trim().slice(0, 60) || 'client';
 }
 
-function exportToPDF(
+/**
+ * html2pdf pulls in jsPDF and html2canvas — together the bulk of the bundle,
+ * for a button most sessions never press. Loaded on demand instead.
+ */
+async function exportToPDF(
   clientName: string,
   summary: Record<string, unknown>,
   fields: FieldToCollect[],
   businessName: string
 ) {
+  const { default: html2pdf } = await import('html2pdf.js');
+
   const knownKeys = new Set(fields.map((f) => f.key));
   const extraKeys = Object.keys(summary).filter((k) => !knownKeys.has(k));
   const display = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
