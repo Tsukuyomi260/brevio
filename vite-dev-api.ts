@@ -144,8 +144,15 @@ export function devApi(apiDir = 'api'): Plugin {
             query[key] = value;
           });
 
+          // A route may opt out of body parsing exactly as it does on Vercel,
+          // via `export const config = { api: { bodyParser: false } }`. The
+          // Stripe webhook needs this: its signature covers the exact bytes
+          // sent, so parsing and re-serialising would invalidate every event.
+          const parseBody =
+            (mod.config as { api?: { bodyParser?: boolean } } | undefined)?.api?.bodyParser !== false;
+
           let body: unknown;
-          if (req.method && !['GET', 'HEAD'].includes(req.method)) {
+          if (parseBody && req.method && !['GET', 'HEAD'].includes(req.method)) {
             const raw = await readBody(req);
             if (raw) {
               const type = req.headers['content-type'] ?? '';
@@ -153,7 +160,9 @@ export function devApi(apiDir = 'api'): Plugin {
             }
           }
 
-          Object.assign(req, { query, body });
+          // When parsing is off the stream is left untouched, so the handler
+          // can read the raw bytes itself.
+          Object.assign(req, parseBody ? { query, body } : { query });
           await handler(req, adaptResponse(res));
         } catch (err) {
           const detail = err instanceof Error ? err.message : 'unknown error';
