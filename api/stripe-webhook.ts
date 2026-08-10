@@ -52,7 +52,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Missing signature' });
   }
 
-  const stripe = getStripe();
+  // Configuration failures are separated from signature failures below: a
+  // missing key is temporary and deserves a 500 so Stripe retries once it is
+  // fixed, whereas a bad signature is permanent and must not be retried.
+  let stripe: Stripe;
+  let supabase: SupabaseClient;
+  try {
+    stripe = getStripe();
+    supabase = getSupabaseAdmin();
+  } catch (err) {
+    console.error(
+      'stripe-webhook: not configured —',
+      err instanceof Error ? err.message : 'unknown error',
+    );
+    return res.status(500).json({ error: 'Webhook not configured' });
+  }
+
   let event: Stripe.Event;
   try {
     event = stripe.webhooks.constructEvent(await readRawBody(req), signature, secret);
@@ -65,8 +80,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
     return res.status(400).json({ error: 'Invalid signature' });
   }
-
-  const supabase = getSupabaseAdmin();
 
   // Claim the event. A duplicate id means a redelivery we have already applied,
   // which is a success as far as Stripe is concerned.

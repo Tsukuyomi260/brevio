@@ -410,8 +410,24 @@ function UpgradeButton({ accessToken, atQuota }: { accessToken: string; atQuota:
         method: 'POST',
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      const data = await res.json();
+
+      // A function that crashes before it can reply returns the platform's
+      // plain-text error page. Parsing that as JSON throws a message about
+      // stray characters, which hides what actually went wrong.
+      const raw = await res.text();
+      let data: { url?: string; error?: string } = {};
+      try {
+        data = JSON.parse(raw) as typeof data;
+      } catch {
+        throw new Error(
+          res.ok
+            ? 'The server sent an unreadable response.'
+            : `The server failed (HTTP ${res.status}). Check the function logs.`,
+        );
+      }
+
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      if (!data.url) throw new Error('The server did not return a checkout link.');
       window.location.href = data.url;
     } catch (err) {
       setBusy(false);

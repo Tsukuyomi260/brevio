@@ -2,5 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     { "source": "/((?!api/|assets/|src/|node_modules/|@).*)", "destination": "/index.html" }
-  ]
+  ],
+  "crons": [{ "path": "/api/cron/abandon", "schedule": "0 3 * * *" }]
 }

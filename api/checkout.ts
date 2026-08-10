@@ -22,15 +22,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const auth = await requireProfile(req);
-  if (!auth.ok) return res.status(auth.status).json({ error: auth.error });
-  const { profile } = auth;
-
-  if (profile.plan === 'pro') {
-    return res.status(409).json({ error: 'This account is already on the Pro plan' });
-  }
-
   try {
+    // Inside the try: resolving the caller touches Supabase, which throws when
+    // configuration is missing. Escaping this handler would hand the browser
+    // Vercel's plain-text crash page instead of a JSON error it can read.
+    const auth = await requireProfile(req);
+    if (!auth.ok) return res.status(auth.status).json({ error: auth.error });
+    const { profile } = auth;
+
+    if (profile.plan === 'pro') {
+      return res.status(409).json({ error: 'This account is already on the Pro plan' });
+    }
+
     const stripe = getStripe();
     const supabase = getSupabaseAdmin();
 
@@ -80,7 +83,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error('checkout failed:', err.type, err.code ?? '');
       return res.status(502).json({ error: 'Could not reach the payment provider' });
     }
-    console.error('checkout failed:', err instanceof Error ? err.message : describeDbError(err));
+    const message = err instanceof Error ? err.message : describeDbError(err);
+    console.error('checkout failed:', message);
+    // A missing environment variable is an operator problem, not a user one.
+    // Saying so beats a generic failure, without naming which one is absent.
+    if (message.includes('is not set')) {
+      return res.status(503).json({ error: 'Billing is not configured on the server' });
+    }
     return res.status(500).json({ error: 'Could not start the checkout' });
   }
 }
