@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { loadLocalEnv } from './env';
+import { loadLocalEnv } from './env.js';
 
 loadLocalEnv();
 

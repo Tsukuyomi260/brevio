@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { loadLocalEnv } from './env';
+import { loadLocalEnv } from './env.js';
 
 // Ensure .env.local is loaded before we read the key (local dev only).
 loadLocalEnv();

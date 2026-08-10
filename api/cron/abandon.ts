@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getSupabaseAdmin, describeDbError } from '../_lib/supabase';
+import { getSupabaseAdmin, describeDbError } from '../_lib/supabase.js';
 
 /**
  * GET /api/cron/abandon — marks stale conversations as abandoned.

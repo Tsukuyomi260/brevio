@@ -1,5 +1,5 @@
 import Stripe from 'stripe';
-import { loadLocalEnv } from './env';
+import { loadLocalEnv } from './env.js';
 
 loadLocalEnv();
 

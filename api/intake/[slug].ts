@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getSupabaseAdmin } from '../_lib/supabase';
+import { getSupabaseAdmin } from '../_lib/supabase.js';
 
 /**
  * GET /api/intake/[slug] — public profile lookup for the intake page.

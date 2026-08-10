@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import Anthropic from '@anthropic-ai/sdk';
-import { getAnthropic, CHAT_MODEL, type FieldToCollect } from './_lib/anthropic';
-import { getSupabaseAdmin, describeDbError } from './_lib/supabase';
-import { normalizePhone, normalizeEmail } from './_lib/contacts';
+import { getAnthropic, CHAT_MODEL, type FieldToCollect } from './_lib/anthropic.js';
+import { getSupabaseAdmin, describeDbError } from './_lib/supabase.js';
+import { normalizePhone, normalizeEmail } from './_lib/contacts.js';
 
 interface SummarizeBody {
   conversation_id?: string;

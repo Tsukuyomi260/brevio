@@ -1,5 +1,5 @@
 import type { VercelRequest } from '@vercel/node';
-import { getSupabaseAdmin } from './supabase';
+import { getSupabaseAdmin } from './supabase.js';
 
 /**
  * Server-side authentication for the pro-facing endpoints.

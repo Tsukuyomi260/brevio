@@ -8,9 +8,9 @@ import {
   CHAT_MAX_TOKENS,
   type FieldToCollect,
   type ReturningClient,
-} from './_lib/anthropic';
-import { getSupabaseAdmin, describeDbError } from './_lib/supabase';
-import { detectIdentifiers, normalizePhone, normalizeEmail } from './_lib/contacts';
+} from './_lib/anthropic.js';
+import { getSupabaseAdmin, describeDbError } from './_lib/supabase.js';
+import { detectIdentifiers, normalizePhone, normalizeEmail } from './_lib/contacts.js';
 
 interface ChatRequestBody {
   slug?: string;

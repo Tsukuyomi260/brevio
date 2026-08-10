@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Stripe from 'stripe';
-import { requireProfile } from './_lib/auth';
-import { getStripe, getProPriceId, getAppUrl } from './_lib/stripe';
-import { getSupabaseAdmin, describeDbError } from './_lib/supabase';
+import { requireProfile } from './_lib/auth.js';
+import { getStripe, getProPriceId, getAppUrl } from './_lib/stripe.js';
+import { getSupabaseAdmin, describeDbError } from './_lib/supabase.js';
 
 /**
  * POST /api/checkout — Step 8: open a Stripe Checkout Session for the Pro plan.

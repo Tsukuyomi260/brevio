@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
-import { getStripe } from './_lib/stripe';
-import { getSupabaseAdmin, describeDbError } from './_lib/supabase';
+import { getStripe } from './_lib/stripe.js';
+import { getSupabaseAdmin, describeDbError } from './_lib/supabase.js';
 
 /**
  * POST /api/stripe-webhook — Step 9: the only place a plan actually changes.
