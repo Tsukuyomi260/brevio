@@ -1,7 +1,10 @@
-export default function Loading() {
-  return (
-    <div className="min-h-dvh flex items-center justify-center bg-paper">
-      <p className="text-ink-faint text-sm">Loading…</p>
-    </div>
-  );
+import { LoadingScreen } from './states';
+
+/**
+ * Kept as the default full-page loader so existing call sites stay unchanged.
+ * The look lives in `states.tsx` with the empty and error screens, so all three
+ * move together.
+ */
+export default function Loading({ label }: { label?: string }) {
+  return <LoadingScreen label={label} />;
 }

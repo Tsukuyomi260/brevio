@@ -3,7 +3,8 @@ import { Navigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Copy, Check, Download, ChevronDown, RotateCw, Repeat, Sparkles } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
-import Loading from '../components/Loading';
+import CheckoutActivation from '../components/CheckoutActivation';
+import { EmptyState, ErrorState, LoadingBlock, LoadingScreen } from '../components/states';
 import { supabase } from '../lib/supabase';
 import type { FieldToCollect } from '../types';
 
@@ -105,15 +106,17 @@ export default function Dashboard() {
   // Returning from Stripe Checkout. The plan itself is flipped by the webhook,
   // never by this redirect — a URL the user can type is not proof of payment.
   const checkout = searchParams.get('checkout');
+
+  const clearCheckoutParam = () => {
+    searchParams.delete('checkout');
+    setSearchParams(searchParams, { replace: true });
+  };
+
+  // A cancelled checkout needs no screen of its own: nothing happened, and the
+  // dashboard behind the toast is already the right place to be.
   useEffect(() => {
-    if (!checkout) return;
-    if (checkout === 'success') {
-      toast.success('Payment received', {
-        description: 'Your Pro plan activates as soon as Stripe confirms it.',
-      });
-    } else if (checkout === 'cancelled') {
-      toast('Checkout cancelled', { description: 'Nothing was charged.' });
-    }
+    if (checkout !== 'cancelled') return;
+    toast('Checkout cancelled', { description: 'Nothing was charged.' });
     searchParams.delete('checkout');
     setSearchParams(searchParams, { replace: true });
   }, [checkout, searchParams, setSearchParams]);
@@ -180,9 +183,15 @@ export default function Dashboard() {
     };
   }, [profileId, refreshKey]);
 
-  if (loading) return <Loading />;
+  if (loading) return <LoadingScreen label="Opening your dashboard…" />;
   if (!session) return <Navigate to="/login" replace />;
   if (!profile) return <Navigate to="/onboarding" replace />;
+
+  // Owns the gap between paying and the webhook landing, so the pro never sees
+  // a "Free" badge on a plan they have just bought.
+  if (checkout === 'success') {
+    return <CheckoutActivation onDone={clearCheckoutParam} />;
+  }
 
   const publicLink = `${window.location.origin}/intake/${profile.slug}`;
   const fields = profile.intake_config?.fields_to_collect ?? [];
@@ -331,12 +340,16 @@ export default function Dashboard() {
             </h2>
 
             {completed === 0 && (
-              <div className="card p-10 text-center space-y-2">
-                <p className="text-sm font-medium">Waiting for your first client…</p>
-                <p className="text-sm text-ink-faint">
-                  Share your intake link above. When clients finish, their summaries will appear here.
-                </p>
-              </div>
+              <EmptyState
+                title="Waiting for your first client"
+                description="Share your intake link above. When a client finishes their chat, their summary appears here."
+                action={
+                  <button onClick={copyPublicLink} className="btn-ghost gap-2 text-xs">
+                    <Copy className="h-3.5 w-3.5" />
+                    {copied === 'link' ? 'Copied!' : 'Copy the link'}
+                  </button>
+                }
+              />
             )}
 
             {completed > completedRows.length && (
@@ -377,17 +390,15 @@ export default function Dashboard() {
           </section>
         )}
 
-        {convs.status === 'loading' && (
-          <div className="card p-8 text-center text-sm text-ink-faint">
-            Loading conversations…
-          </div>
-        )}
+        {convs.status === 'loading' && <LoadingBlock label="Loading conversations…" />}
 
         {convs.status === 'error' && (
-          <div className="card p-5 text-sm text-ink-soft">
-            Couldn't load conversations.
-            <span className="block mt-1 text-xs text-ink-faint">{convs.detail}</span>
-          </div>
+          <ErrorState
+            title="Couldn't load your conversations"
+            description="Your summaries are safe — this is a problem reading them, not storing them."
+            detail={convs.detail}
+            onRetry={refresh}
+          />
         )}
 
         <p className="text-center font-mono text-[11px] text-ink-faint">Powered by Claude ✦ Brevio</p>

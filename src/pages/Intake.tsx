@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { AIInput } from '@/components/ui/ai-input';
+import { ErrorScreen, LoadingScreen } from '../components/states';
 
 interface PublicProfile {
   business_name: string;
@@ -48,17 +49,27 @@ export default function Intake() {
   }, [slug]);
 
   if (load.status === 'loading') {
-    return <Centered>Loading…</Centered>;
+    return <LoadingScreen label="Preparing your conversation…" />;
   }
+  // Visitors never signed up and have no way to debug this, so both failures
+  // say what to do next rather than what went wrong internally.
   if (load.status === 'not_found') {
-    return <Centered>This intake link doesn’t exist.</Centered>;
+    return (
+      <ErrorScreen
+        title="This link doesn't exist"
+        description="It may have been mistyped, or withdrawn by the business. Ask them for a fresh one."
+      />
+    );
   }
   if (load.status === 'error') {
     return (
-      <Centered>
-        Couldn’t load this page.
-        <span className="block text-xs text-ink-faint mt-1">{load.detail}</span>
-      </Centered>
+      <ErrorScreen
+        title="Couldn't open this page"
+        description="Check your connection and try again."
+        detail={load.detail}
+        onRetry={() => window.location.reload()}
+        retryLabel="Reload"
+      />
     );
   }
 
@@ -380,13 +391,5 @@ function ThinkingBubble() {
         <span className="brevio-dot" style={{ animationDelay: '0.36s' }} />
       </span>
     </div>
-  );
-}
-
-function Centered({ children }: { children: ReactNode }) {
-  return (
-    <main className="min-h-dvh bg-paper flex items-center justify-center p-6 text-center">
-      <p className="text-ink-soft text-sm">{children}</p>
-    </main>
   );
 }
