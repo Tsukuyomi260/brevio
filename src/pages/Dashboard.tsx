@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Copy, Check, Download, ChevronDown, RotateCw, Repeat, Sparkles } from 'lucide-react';
+import {
+  Copy,
+  Check,
+  CreditCard,
+  Download,
+  ChevronDown,
+  RotateCw,
+  Repeat,
+  Sparkles,
+} from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import CheckoutActivation from '../components/CheckoutActivation';
 import { EmptyState, ErrorState, LoadingBlock, LoadingScreen } from '../components/states';
@@ -286,29 +295,37 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* ── Quota bar (Free plan only) ────────────────────────– */}
-        {convs.status === 'ready' && !isPro && (
-          <div className="rise rise-3 space-y-1">
-            <div className="flex items-baseline justify-between">
-              <p className="text-xs font-medium text-ink-soft">Monthly quota</p>
-              <span className="font-mono text-xs text-ink-faint">
-                {convs.monthCount} / {FREE_MONTHLY_QUOTA}
-              </span>
-            </div>
-            <div className="h-2 rounded-full bg-line overflow-hidden">
-              <div
-                className="h-full rounded-full bg-accent transition-all"
-                style={{
-                  width: `${Math.min((convs.monthCount / FREE_MONTHLY_QUOTA) * 100, 100)}%`,
-                }}
+        {/* ── Plan ───────────────────────────────────────────────── */}
+        {convs.status === 'ready' &&
+          (isPro ? (
+            <ProPanel
+              accessToken={session.access_token}
+              monthCount={convs.monthCount}
+              renewsOn={profile.current_period_end}
+              status={profile.subscription_status}
+            />
+          ) : (
+            <div className="rise rise-3 space-y-1">
+              <div className="flex items-baseline justify-between">
+                <p className="text-xs font-medium text-ink-soft">Monthly quota</p>
+                <span className="font-mono text-xs text-ink-faint">
+                  {convs.monthCount} / {FREE_MONTHLY_QUOTA}
+                </span>
+              </div>
+              <div className="h-2 rounded-full bg-line overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-accent transition-all"
+                  style={{
+                    width: `${Math.min((convs.monthCount / FREE_MONTHLY_QUOTA) * 100, 100)}%`,
+                  }}
+                />
+              </div>
+              <UpgradeButton
+                accessToken={session.access_token}
+                atQuota={convs.monthCount >= FREE_MONTHLY_QUOTA}
               />
             </div>
-            <UpgradeButton
-              accessToken={session.access_token}
-              atQuota={convs.monthCount >= FREE_MONTHLY_QUOTA}
-            />
-          </div>
-        )}
+          ))}
 
         {/* ── Returning clients ──────────────────────────────────– */}
         {convs.status === 'ready' && convs.contacts.length > 0 && (
@@ -404,6 +421,89 @@ export default function Dashboard() {
         <p className="text-center font-mono text-[11px] text-ink-faint">Powered by Claude ✦ Brevio</p>
       </div>
     </main>
+  );
+}
+
+/**
+ * The Pro counterpart to the Free quota bar. Where the Free plan shows a
+ * ceiling being approached, this shows there is none — and gives the pro the
+ * one thing a subscriber actually needs: control over their own billing.
+ */
+function ProPanel({
+  accessToken,
+  monthCount,
+  renewsOn,
+  status,
+}: {
+  accessToken: string;
+  monthCount: number;
+  renewsOn: string | null;
+  status: string | null;
+}) {
+  const [busy, setBusy] = useState(false);
+  // Anything other than a clean 'active' is worth surfacing: a failed payment
+  // shows up here days before Stripe actually cancels the subscription.
+  const needsAttention = status !== null && status !== 'active' && status !== 'trialing';
+
+  async function openPortal() {
+    setBusy(true);
+    try {
+      const res = await fetch('/api/portal', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const raw = await res.text();
+      let data: { url?: string; error?: string } = {};
+      try {
+        data = JSON.parse(raw) as typeof data;
+      } catch {
+        throw new Error(`The server failed (HTTP ${res.status}).`);
+      }
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      if (!data.url) throw new Error('The server did not return a portal link.');
+      window.location.href = data.url;
+    } catch (err) {
+      setBusy(false);
+      toast.error('Could not open billing', {
+        description: err instanceof Error ? err.message : 'Please try again.',
+      });
+    }
+  }
+
+  return (
+    <section className="rise rise-3 rounded-[14px] border border-accent/50 bg-accent/10 p-5 space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-1">
+          <h2 className="flex items-center gap-2 text-sm font-semibold">
+            <Sparkles className="h-4 w-4 text-accent-deep" />
+            Pro plan
+          </h2>
+          <p className="text-sm text-ink-soft">
+            Unlimited conversations — {monthCount} this month, with no cap.
+          </p>
+        </div>
+        <span className="shrink-0 rounded-full bg-accent px-3 py-1 text-xs font-semibold text-ink">
+          Active
+        </span>
+      </div>
+
+      {needsAttention && (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          Subscription status: <strong>{status}</strong>. Update your payment
+          method to avoid losing Pro.
+        </p>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-accent/40 pt-3">
+        <p className="font-mono text-[11px] text-ink-soft">
+          {renewsOn ? `Renews ${fullDate(renewsOn)}` : 'Renewal date pending'}
+        </p>
+        <button onClick={openPortal} disabled={busy} className="btn-ink gap-2 py-2 text-xs">
+          <CreditCard className="h-3.5 w-3.5" />
+          {busy ? 'Opening…' : 'Manage subscription'}
+        </button>
+      </div>
+    </section>
   );
 }
 

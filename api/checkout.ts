@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Stripe from 'stripe';
 import { requireProfile } from './_lib/auth.js';
-import { getStripe, getProPriceId, getAppUrl } from './_lib/stripe.js';
+import { getStripe, getProPriceId, resolveReturnOrigin } from './_lib/stripe.js';
 import { getSupabaseAdmin, describeDbError } from './_lib/supabase.js';
 
 /**
@@ -59,7 +59,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (error) throw error;
     }
 
-    const appUrl = getAppUrl();
+    // Send them back to the host they started on, so their session is still
+    // there when they land. Validated against the allowlist, never trusted.
+    const appUrl = resolveReturnOrigin(
+      typeof req.headers.origin === 'string' ? req.headers.origin : undefined,
+    );
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       customer: customerId,
