@@ -16,9 +16,7 @@ import { useAuth } from '../auth/AuthProvider';
 import CheckoutActivation from '../components/CheckoutActivation';
 import { EmptyState, ErrorState, LoadingBlock, LoadingScreen } from '../components/states';
 import { supabase } from '../lib/supabase';
-import type { FieldToCollect } from '../types';
-
-const FREE_MONTHLY_QUOTA = 10;
+import { FREE_MONTHLY_QUOTA, type FieldToCollect } from '../types';
 
 /** Conversations fetched for the list. Stat counts are queried separately. */
 const LIST_LIMIT = 50;

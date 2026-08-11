@@ -2,7 +2,16 @@
 
 > **Brevio** — a conversational AI intake platform for service professionals. Collects structured client information through a guided chat (Claude), with a Free/Pro subscription flow (Stripe).
 
-**Status:** 🚧 Step 10/10 (deploy + polish) · portfolio demo · Stripe in Test mode.
+**[Live demo →](https://brevio-five.vercel.app)** · portfolio project · Stripe runs in Test mode.
+
+## Try it
+
+1. Sign up at [brevio-five.vercel.app](https://brevio-five.vercel.app) — any e-mail, no confirmation needed
+2. Name your practice and tell the assistant what to collect
+3. Open your own `/intake/[slug]` link in a private window and hold a conversation as a client would
+4. Finish the chat, then read the structured summary on your dashboard
+5. To exercise billing, upgrade with Stripe's test card `4242 4242 4242 4242`, any future
+   expiry, any CVC. Nothing is charged.
 
 ## What it does
 
@@ -41,6 +50,7 @@ Apply the migrations in order, in the Supabase SQL editor or with `supabase db p
 | [0002_contacts.sql](supabase/migrations/0002_contacts.sql) | `contacts` for returning-client detection |
 | [0003_stripe_events.sql](supabase/migrations/0003_stripe_events.sql) | webhook idempotency |
 | [0004_abandon_stale_conversations.sql](supabase/migrations/0004_abandon_stale_conversations.sql) | sweep for stale conversations |
+| [0005_practice_logo.sql](supabase/migrations/0005_practice_logo.sql) | practice logo + storage bucket |
 
 ### Stripe webhooks locally
 
@@ -103,7 +113,11 @@ log the detail instead. Nothing collected from a visitor is ever sent to Stripe.
 7.  ✅ Pro dashboard (summaries + plan)
 8.  ✅ Stripe Checkout (subscription)
 9.  ✅ Stripe webhook + edge cases
-10. 🚧 **Deploy + polish + portfolio**
+10. ✅ Deploy + polish + portfolio
+
+Beyond the original plan: returning-client recognition, a settings page for the
+assistant and collected fields, practice logos, PDF export of a summary, the
+Stripe customer portal, and a scheduled sweep for abandoned conversations.
 
 ## Deploying
 

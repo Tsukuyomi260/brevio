@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
+import { FREE_MONTHLY_QUOTA } from '../types';
 
 const STEPS = [
   {
@@ -65,7 +66,7 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="rise rise-5 px-6 pb-14 max-w-4xl mx-auto w-full">
+      <section className="rise rise-5 px-6 pb-12 max-w-4xl mx-auto w-full">
         <div className="grid sm:grid-cols-3 gap-4">
           {STEPS.map((s) => (
             <div key={s.n} className="card p-5 text-left space-y-2">
@@ -75,6 +76,37 @@ export default function Landing() {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* Pricing belongs in public: asking someone to sign up to discover what
+          a subscription costs is a good way to lose them at the door. */}
+      <section className="px-6 pb-14 max-w-4xl mx-auto w-full">
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="card p-5 space-y-3">
+            <div className="flex items-baseline justify-between">
+              <h2 className="font-display font-semibold">Free</h2>
+              <span className="font-mono text-sm text-ink-soft">€0</span>
+            </div>
+            <p className="text-sm text-ink-soft leading-relaxed">
+              {FREE_MONTHLY_QUOTA} conversations a month, every feature included.
+              Enough to see whether it earns its place.
+            </p>
+          </div>
+
+          <div className="rounded-[14px] border border-accent/50 bg-accent/10 p-5 space-y-3">
+            <div className="flex items-baseline justify-between">
+              <h2 className="font-display font-semibold">Pro</h2>
+              <span className="font-mono text-sm text-ink">
+                €11.99<span className="text-ink-soft">/month</span>
+              </span>
+            </div>
+            <p className="text-sm text-ink-soft leading-relaxed">
+              Unlimited conversations. Cancel whenever you like — it stays active
+              until the end of the period you paid for.
+            </p>
+          </div>
+        </div>
+
         <p className="text-center font-mono text-[11px] text-ink-faint mt-10">
           Powered by Claude ✦ Brevio
         </p>

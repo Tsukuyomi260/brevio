@@ -1,3 +1,9 @@
+/**
+ * Free plan: conversations per calendar month. Display only — the quota is
+ * enforced server-side in `api/chat.ts`, which owns the authoritative value.
+ */
+export const FREE_MONTHLY_QUOTA = 10;
+
 export interface FieldToCollect {
   key: string;
   label: string;
