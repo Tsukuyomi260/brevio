@@ -7,6 +7,7 @@ import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Onboarding from './pages/Onboarding';
 import Dashboard from './pages/Dashboard';
+import Settings from './pages/Settings';
 import Intake from './pages/Intake';
 import NotFound from './pages/NotFound';
 
@@ -21,6 +22,7 @@ export default function App() {
             <Route path="/signup" element={<Signup />} />
             <Route path="/onboarding" element={<Onboarding />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/settings" element={<Settings />} />
             <Route path="/intake/:slug" element={<Intake />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Navigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   Copy,
@@ -9,6 +9,7 @@ import {
   ChevronDown,
   RotateCw,
   Repeat,
+  Settings as SettingsIcon,
   Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
@@ -238,9 +239,20 @@ export default function Dashboard() {
       <div className="mx-auto w-full max-w-3xl px-5 py-8 space-y-8">
         {/* ── Header ─────────────────────────────────────────────── */}
         <header className="rise flex items-start justify-between gap-4">
-          <div>
-            <h1 className="font-display text-2xl font-bold tracking-tight">{profile.business_name}</h1>
-            <p className="text-sm text-ink-soft mt-0.5">{profile.profession}</p>
+          <div className="flex min-w-0 items-center gap-3">
+            {profile.logo_url && (
+              <img
+                src={profile.logo_url}
+                alt=""
+                className="h-11 w-11 shrink-0 rounded-[12px] border border-line object-cover"
+              />
+            )}
+            <div className="min-w-0">
+              <h1 className="truncate font-display text-2xl font-bold tracking-tight">
+                {profile.business_name}
+              </h1>
+              <p className="text-sm text-ink-soft mt-0.5">{profile.profession}</p>
+            </div>
           </div>
           <div className="flex items-center gap-3 pt-1">
             <button
@@ -251,6 +263,13 @@ export default function Dashboard() {
             >
               <RotateCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
             </button>
+            <Link
+              to="/settings"
+              title="Settings"
+              className="text-ink-faint transition-colors hover:text-ink"
+            >
+              <SettingsIcon className="h-4 w-4" />
+            </Link>
             <span
               className={
                 'rounded-full px-3 py-1 text-xs font-semibold ' +

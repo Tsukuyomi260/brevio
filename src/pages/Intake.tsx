@@ -6,6 +6,7 @@ import { ErrorScreen, LoadingScreen } from '../components/states';
 interface PublicProfile {
   business_name: string;
   profession: string;
+  logo_url: string | null;
   assistant_name: string | null;
   welcome_message: string | null;
 }
@@ -80,7 +81,15 @@ export default function Intake() {
       <main className="min-h-dvh bg-paper flex items-center justify-center p-6">
         <div className="w-full max-w-md space-y-8 text-center">
           <div className="space-y-3 animate-brevio-rise">
-            <div className="text-4xl">✨</div>
+            {profile.logo_url ? (
+              <img
+                src={profile.logo_url}
+                alt=""
+                className="mx-auto h-20 w-20 rounded-[18px] border border-line bg-white object-cover"
+              />
+            ) : (
+              <div className="text-4xl">✨</div>
+            )}
             <h1 className="font-display text-3xl font-bold text-ink">
               {profile.business_name}
             </h1>

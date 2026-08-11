@@ -16,8 +16,18 @@ import { getSupabaseAdmin, describeDbError } from './_lib/supabase.js';
 // re-serialising changes them, and every verification then fails.
 export const config = { api: { bodyParser: false } };
 
-/** Subscription states that entitle the pro to the Pro plan. */
-const ENTITLED = new Set(['active', 'trialing']);
+/**
+ * Subscription states that entitle the pro to the Pro plan.
+ *
+ * `past_due` is included on purpose. A renewal charge that fails puts the
+ * subscription there while Stripe retries for roughly two weeks; cutting access
+ * on the first failure would punish a paying customer for an expired card over
+ * a weekend. Stripe moves the subscription to `canceled` or `unpaid` once it
+ * gives up, and both drop out of this set — so access ends when the money
+ * really has, not at the first hiccup. The dashboard flags `past_due` visibly
+ * in the meantime.
+ */
+const ENTITLED = new Set(['active', 'trialing', 'past_due']);
 
 const EVENTS = [
   'checkout.session.completed',

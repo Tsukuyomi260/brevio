@@ -17,6 +17,8 @@ export interface Profile {
   business_name: string;
   profession: string;
   slug: string;
+  /** Public URL of the practice logo, or null when none has been uploaded. */
+  logo_url: string | null;
   intake_config: IntakeConfig;
   plan: 'free' | 'pro';
   stripe_customer_id: string | null;

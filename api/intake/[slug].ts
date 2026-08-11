@@ -23,7 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from('profiles')
-      .select('business_name, profession, intake_config')
+      .select('business_name, profession, logo_url, intake_config')
       .eq('slug', slug)
       .maybeSingle();
 
@@ -34,6 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({
       business_name: data.business_name,
       profession: data.profession,
+      logo_url: (data.logo_url as string) ?? null,
       assistant_name: (cfg.assistant_name as string) ?? null,
       welcome_message: (cfg.welcome_message as string) ?? null,
     });
